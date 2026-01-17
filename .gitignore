@@ -1,0 +1,14 @@
+.venv
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.md
+docs
+docs/
+.vscode/
+.claude
+.env
+.env.local
+*.owl
+

@@ -1,0 +1,47 @@
+# Core Dependencies
+python-dotenv
+pydantic
+
+# Ontology & OWL
+owlready2
+rdflib
+
+# LangChain & LangGraph - Latest compatible versions
+langchain
+langchain-community
+langchain-core
+langgraph
+
+# Ollama Integration
+ollama
+langchain-ollama
+
+# MCP (Model Context Protocol)
+mcp
+
+# Vector Store & Embeddings (Neo4j-based)
+sentence-transformers
+
+# Neo4j Graph Database
+neo4j
+
+# Data Processing
+numpy
+pandas
+
+# Jupyter
+jupyter
+ipykernel
+matplotlib
+seaborn
+
+# FastAPI (Optional - for REST API)
+fastapi
+uvicorn[standard]
+
+# Utilities
+httpx
+pyyaml
+rich
+typer
+python-dotenv

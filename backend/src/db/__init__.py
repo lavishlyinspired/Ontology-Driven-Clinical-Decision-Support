@@ -1,0 +1,71 @@
+"""
+Database Layer for LUCADA
+Includes Neo4j graph database, vector store integration, and data models.
+
+CRITICAL PRINCIPLE from final.md: "Neo4j as a tool, not a brain"
+- All medical reasoning happens in Python/OWL
+- Neo4j is only for storage and retrieval
+- Only PersistenceAgent can use Neo4jWriteTools
+"""
+
+from .neo4j_schema import LUCADAGraphDB, Neo4jConfig
+from .vector_store import LUCADAVectorStore
+
+# New models per final.md PHASE 3
+from .models import (
+    PatientFact,
+    PatientFactWithCodes,
+    ClassificationResult,
+    TreatmentRecommendation,
+    InferenceRecord,
+    WriteReceipt,
+    MDTSummary,
+    DecisionSupportResponse,
+    Sex,
+    TNMStage,
+    HistologyType,
+    PerformanceStatus,
+    Laterality,
+    InferenceStatus,
+    EvidenceLevel,
+    TreatmentIntent
+)
+
+# New Neo4j tools with strict read/write separation
+from .neo4j_tools import (
+    Neo4jReadTools,
+    Neo4jWriteTools,
+    setup_neo4j_schema
+)
+
+__all__ = [
+    # Legacy
+    "LUCADAGraphDB",
+    "Neo4jConfig",
+    "LUCADAVectorStore",
+    
+    # Models
+    "PatientFact",
+    "PatientFactWithCodes",
+    "ClassificationResult",
+    "TreatmentRecommendation",
+    "InferenceRecord",
+    "WriteReceipt",
+    "MDTSummary",
+    "DecisionSupportResponse",
+    
+    # Enums
+    "Sex",
+    "TNMStage",
+    "HistologyType",
+    "PerformanceStatus",
+    "Laterality",
+    "InferenceStatus",
+    "EvidenceLevel",
+    "TreatmentIntent",
+    
+    # Neo4j Tools
+    "Neo4jReadTools",
+    "Neo4jWriteTools",
+    "setup_neo4j_schema",
+]
