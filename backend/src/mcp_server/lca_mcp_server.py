@@ -39,6 +39,9 @@ from src.agents.conflict_resolution_agent import ConflictResolutionAgent
 from src.agents.explanation_agent import ExplanationAgent
 from src.agents.lca_workflow import LCAWorkflow, analyze_patient
 
+# Import 2025 enhanced tools
+from src.mcp_server.enhanced_tools import register_enhanced_tools
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,7 @@ class LCAMCPServer:
         self.rule_engine: GuidelineRuleEngine = None
         self.snomed_loader: SNOMEDLoader = None
         self.workflow = None
+        self.enhanced_tools = None  # For 2025 enhanced capabilities
 
         # Register tools
         self._register_tools()
@@ -924,6 +928,18 @@ class LCAMCPServer:
                     type="text",
                     text=json.dumps({"status": "error", "message": str(e)}, indent=2)
                 )]
+
+        # ========================================
+        # REGISTER 2025 ENHANCED TOOLS
+        # ========================================
+        logger.info("Registering 2025 enhanced tools...")
+        try:
+            enhanced_tool_instances = register_enhanced_tools(self.server, self)
+            self.enhanced_tools = enhanced_tool_instances
+            logger.info("✓ Enhanced tools registered: graph_algorithms, temporal_analyzer, biomarker_agent, uncertainty_quantifier, loinc_integrator")
+        except Exception as e:
+            logger.warning(f"Could not register enhanced tools: {e}")
+            logger.warning("Continuing with basic tools only")
 
     def _categorize_concept(self, name: str) -> str:
         """Categorize a SNOMED concept by name."""
