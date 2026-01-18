@@ -41,6 +41,7 @@ from src.agents.lca_workflow import LCAWorkflow, analyze_patient
 
 # Import 2025 enhanced tools
 from src.mcp_server.enhanced_tools import register_enhanced_tools
+from src.mcp_server.adaptive_tools import register_adaptive_tools
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ class LCAMCPServer:
         self.snomed_loader: SNOMEDLoader = None
         self.workflow = None
         self.enhanced_tools = None  # For 2025 enhanced capabilities
+        self.adaptive_tools = None  # For 2026 adaptive multi-agent workflow
 
         # Register tools
         self._register_tools()
@@ -940,6 +942,18 @@ class LCAMCPServer:
         except Exception as e:
             logger.warning(f"Could not register enhanced tools: {e}")
             logger.warning("Continuing with basic tools only")
+
+        # ========================================
+        # REGISTER ADAPTIVE WORKFLOW TOOLS (2026)
+        # ========================================
+        logger.info("Registering adaptive multi-agent workflow tools...")
+        try:
+            adaptive_tool_instances = register_adaptive_tools(self.server, self)
+            self.adaptive_tools = adaptive_tool_instances
+            logger.info("✓ Adaptive tools registered: assess_complexity, run_adaptive_workflow, query_context_graph, execute_parallel_agents")
+        except Exception as e:
+            logger.warning(f"Could not register adaptive tools: {e}")
+            logger.warning("Continuing without adaptive workflow capabilities")
 
     def _categorize_concept(self, name: str) -> str:
         """Categorize a SNOMED concept by name."""
