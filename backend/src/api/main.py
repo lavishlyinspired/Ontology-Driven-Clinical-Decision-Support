@@ -29,7 +29,14 @@ from src.agents.lca_workflow import LCAWorkflow, analyze_patient as workflow_ana
 from src.db.models import DecisionSupportResponse as WorkflowResponse
 
 # Import route modules
-from src.api.routes import patients_router, treatments_router, guidelines_router
+from src.api.routes import (
+    patients_router, 
+    treatments_router, 
+    guidelines_router,
+    analytics_router,
+    audit_router,
+    biomarkers_router
+)
 
 # Initialize FastAPI
 app = FastAPI(
@@ -53,6 +60,9 @@ app.add_middleware(
 app.include_router(patients_router, prefix="/api/v1")
 app.include_router(treatments_router, prefix="/api/v1")
 app.include_router(guidelines_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(audit_router, prefix="/api/v1")
+app.include_router(biomarkers_router, prefix="/api/v1")
 
 # Global service instance
 lca_service: Optional[LungCancerAssistantService] = None
