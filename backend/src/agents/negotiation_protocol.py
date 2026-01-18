@@ -12,7 +12,7 @@ from enum import Enum
 import logging
 from datetime import datetime
 
-from ..db.models import ClassificationResult, Recommendation, EvidenceLevel, TreatmentIntent
+from ..db.models import ClassificationResult, TreatmentRecommendation, EvidenceLevel, TreatmentIntent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

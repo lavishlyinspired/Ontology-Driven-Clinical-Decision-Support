@@ -284,11 +284,14 @@ class IntegratedLCAWorkflow:
         """Convert NSCLC proposal to standard AgentProposal"""
         return AgentProposal(
             agent_id="nsclc_agent",
+            agent_type="NSCLCAgent",
             treatment=nsclc_proposal.treatment,
             confidence=nsclc_proposal.confidence,
             evidence_level=nsclc_proposal.evidence_level,
             treatment_intent=nsclc_proposal.treatment_intent,
             rationale=nsclc_proposal.rationale,
+            guideline_reference=getattr(nsclc_proposal, 'guideline_reference', 'NCCN NSCLC 2025'),
+            contraindications=getattr(nsclc_proposal, 'contraindications', []),
             risk_score=nsclc_proposal.risk_score
         )
 
@@ -296,26 +299,59 @@ class IntegratedLCAWorkflow:
         """Convert SCLC proposal to standard AgentProposal"""
         return AgentProposal(
             agent_id="sclc_agent",
+            agent_type="SCLCAgent",
             treatment=sclc_proposal.treatment,
             confidence=sclc_proposal.confidence,
             evidence_level=sclc_proposal.evidence_level,
             treatment_intent=sclc_proposal.treatment_intent,
             rationale=sclc_proposal.rationale,
+            guideline_reference=getattr(sclc_proposal, 'guideline_reference', 'NCCN SCLC 2025'),
+            contraindications=getattr(sclc_proposal, 'contraindications', []),
             risk_score=sclc_proposal.risk_score
         )
 
     def _convert_biomarker_proposal(self, biomarker_result) -> AgentProposal:
         """Convert Biomarker agent result to AgentProposal"""
-        # Biomarker agent returns different structure - adapt
+        # BiomarkerAgent already returns AgentProposal, but verify structure
+        if isinstance(biomarker_result, AgentProposal):
+            return biomarker_result
+        
+        # Fallback for legacy format
         return AgentProposal(
             agent_id="biomarker_agent",
-            treatment=str(biomarker_result),  # Simplified
-            confidence=0.95,
-            evidence_level="Grade A",
-            treatment_intent="targeted",
-            rationale="Biomarker-driven precision medicine",
-            risk_score=0.2
+            agent_type="BiomarkerAgent",
+            treatment=getattr(biomarker_result, 'treatment', str(biomarker_result)),
+            confidence=getattr(biomarker_result, 'confidence', 0.95),
+            evidence_level=getattr(biomarker_result, 'evidence_level', "Grade A"),
+            treatment_intent=getattr(biomarker_result, 'treatment_intent', "targeted"),
+            rationale=getattr(biomarker_result, 'rationale', "Biomarker-driven precision medicine"),
+            guideline_reference=getattr(biomarker_result, 'guideline_reference', 'NCCN Biomarker Guidelines 2025'),
+            contraindications=getattr(biomarker_result, 'contraindications', []),
+            risk_score=getattr(biomarker_result, 'risk_score', 0.2),
+            expected_benefit=getattr(biomarker_result, 'expected_benefit', None)
         )
+    
+    def _extract_biomarkers(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract biomarker information from patient data"""
+        biomarkers = {}
+        
+        # Check for biomarker_profile in patient data
+        if 'biomarker_profile' in patient_data:
+            biomarkers = patient_data['biomarker_profile']
+        
+        # Also extract individual biomarker fields
+        biomarker_fields = [
+            'egfr_mutation', 'egfr_mutation_type', 'alk_rearrangement',
+            'ros1_rearrangement', 'braf_mutation', 'met_exon14',
+            'ret_rearrangement', 'kras_mutation', 'pdl1_tps', 
+            'tmb_score', 'her2_mutation', 'ntrk_fusion'
+        ]
+        
+        for field in biomarker_fields:
+            if field in patient_data and patient_data[field]:
+                biomarkers[field] = patient_data[field]
+        
+        return biomarkers
 
     async def _run_uncertainty_analysis(self, recommendation, patient):
         """Run uncertainty quantification"""

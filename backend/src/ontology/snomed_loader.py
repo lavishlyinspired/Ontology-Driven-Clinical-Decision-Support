@@ -10,6 +10,12 @@ from typing import Optional, List, Dict, Any
 from owlready2 import *
 import logging
 
+try:
+    from ..config import LCAConfig
+except (ImportError, ValueError):
+    # Fallback if config module not available
+    LCAConfig = None
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -133,9 +139,15 @@ class SNOMEDLoader:
         Initialize SNOMED loader.
 
         Args:
-            owl_path: Path to SNOMED OWL file. If None, uses env variable.
+            owl_path: Path to SNOMED OWL file. If None, uses config or env variable.
         """
-        raw_path = owl_path or os.getenv("SNOMED_OWL_PATH", "ontology-2026-01-17_12-36-08.owl")
+        # Priority: explicit parameter > config > env variable > default
+        if owl_path:
+            raw_path = owl_path
+        elif LCAConfig:
+            raw_path = LCAConfig.SNOMED_CT_PATH
+        else:
+            raw_path = os.getenv("SNOMED_CT_PATH", os.getenv("SNOMED_OWL_PATH", "ontology-2026-01-17_12-36-08.owl"))
         
         # Resolve to absolute path
         resolved_path = Path(raw_path)

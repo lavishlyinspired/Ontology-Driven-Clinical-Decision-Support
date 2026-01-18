@@ -788,7 +788,21 @@ class LUCADAOntology:
 
 if __name__ == "__main__":
     # Create and save LUCADA ontology
+    import os
+    from pathlib import Path
+
+    # Get output directory from environment or use default
+    output_dir = os.getenv("LUCADA_ONTOLOGY_OUTPUT",
+                          r"H:\akash\git\CoherencePLM\Version22\data\lca_ontologies\lucada")
+    output_file = os.getenv("LUCADA_OWL_FILE", "lucada_ontology.owl")
+
+    # Create output directory if it doesn't exist
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Full path to output file
+    output_path = Path(output_dir) / output_file
+
     lucada = LUCADAOntology()
     onto = lucada.create()
-    lucada.save("lucada_ontology.owl")
-    print("\n✓ LUCADA ontology created and saved successfully")
+    lucada.save(str(output_path))
+    print(f"\n✓ LUCADA ontology created and saved to: {output_path}")

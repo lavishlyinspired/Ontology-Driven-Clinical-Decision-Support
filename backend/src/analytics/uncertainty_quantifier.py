@@ -10,7 +10,7 @@ import numpy as np
 from dataclasses import dataclass
 import logging
 
-from ..db.models import Recommendation, PatientFact
+from ..db.models import TreatmentRecommendation, PatientFact
 from ..db.neo4j_tools import Neo4jReadTools
 
 logging.basicConfig(level=logging.INFO)
@@ -55,7 +55,7 @@ class UncertaintyQuantifier:
 
     def quantify_recommendation_uncertainty(
         self,
-        recommendation: Recommendation,
+        recommendation: TreatmentRecommendation,
         patient: PatientFact,
         similar_patients: Optional[List[Dict[str, Any]]] = None
     ) -> UncertaintyMetrics:
@@ -72,12 +72,12 @@ class UncertaintyQuantifier:
         """
         # Get similar patients if not provided
         if similar_patients is None and self.neo4j_tools:
-            similar_patients = self._get_similar_patients(patient, recommendation.treatment)
+            similar_patients = self._get_similar_patients(patient, recommendation.primary_treatment)
 
         if not similar_patients:
             # No historical data - high epistemic uncertainty
             return UncertaintyMetrics(
-                recommendation=recommendation.treatment,
+                recommendation=recommendation.primary_treatment,
                 confidence_score=0.3,
                 epistemic_uncertainty=0.9,
                 aleatoric_uncertainty=0.5,
@@ -91,7 +91,7 @@ class UncertaintyQuantifier:
         epistemic = self._calculate_epistemic_uncertainty(similar_patients)
 
         # Calculate aleatoric uncertainty (outcome variability)
-        aleatoric = self._calculate_aleatoric_uncertainty(similar_patients, recommendation.treatment)
+        aleatoric = self._calculate_aleatoric_uncertainty(similar_patients, recommendation.primary_treatment)
 
         # Combine uncertainties
         total_uncertainty = np.sqrt(epistemic**2 + aleatoric**2)
@@ -116,10 +116,10 @@ class UncertaintyQuantifier:
         )
 
         # Calculate confidence interval for success rate
-        confidence_interval = self._calculate_confidence_interval(similar_patients, recommendation.treatment)
+        confidence_interval = self._calculate_confidence_interval(similar_patients, recommendation.primary_treatment)
 
         return UncertaintyMetrics(
-            recommendation=recommendation.treatment,
+            recommendation=recommendation.primary_treatment,
             confidence_score=confidence_score,
             epistemic_uncertainty=epistemic,
             aleatoric_uncertainty=aleatoric,
@@ -332,7 +332,7 @@ class UncertaintyQuantifier:
 
     def quantify_multiple_recommendations(
         self,
-        recommendations: List[Recommendation],
+        recommendations: List[TreatmentRecommendation],
         patient: PatientFact
     ) -> List[UncertaintyMetrics]:
         """

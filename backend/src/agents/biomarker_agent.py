@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 import logging
 from dataclasses import dataclass
 
-from ..db.models import PatientFactWithCodes, ClassificationResult, Recommendation, EvidenceLevel, TreatmentIntent
+from ..db.models import PatientFactWithCodes, ClassificationResult, TreatmentRecommendation, EvidenceLevel, TreatmentIntent
 from .negotiation_protocol import AgentProposal
 
 logging.basicConfig(level=logging.INFO)

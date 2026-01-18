@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .classification_agent import ClassificationAgent
-from ..ontology.guideline_rules import GuidelineRule, EvidenceLevel, TreatmentIntent
+from ..ontology.guideline_rules import GuidelineRule
 
 
 class NSCLCSubtype(Enum):

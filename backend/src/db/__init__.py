@@ -28,8 +28,12 @@ from .models import (
     Laterality,
     InferenceStatus,
     EvidenceLevel,
-    TreatmentIntent
+    TreatmentIntent,
+    SimilarPatient
 )
+
+# Alias for backward compatibility
+Recommendation = TreatmentRecommendation
 
 # New Neo4j tools with strict read/write separation
 from .neo4j_tools import (
@@ -37,6 +41,11 @@ from .neo4j_tools import (
     Neo4jWriteTools,
     setup_neo4j_schema
 )
+
+# 2025 Enhancements: Graph algorithms and analytics
+from .graph_algorithms import Neo4jGraphAlgorithms
+from .neosemantics_tools import NeosemanticsTools, setup_neosemantics
+from .temporal_analyzer import TemporalAnalyzer
 
 __all__ = [
     # Legacy
@@ -49,6 +58,8 @@ __all__ = [
     "PatientFactWithCodes",
     "ClassificationResult",
     "TreatmentRecommendation",
+    "Recommendation",  # Alias for backward compatibility
+    "SimilarPatient",
     "InferenceRecord",
     "WriteReceipt",
     "MDTSummary",
@@ -68,4 +79,10 @@ __all__ = [
     "Neo4jReadTools",
     "Neo4jWriteTools",
     "setup_neo4j_schema",
+    
+    # 2025 Graph Analytics
+    "Neo4jGraphAlgorithms",
+    "NeosemanticsTools",
+    "setup_neosemantics",
+    "TemporalAnalyzer",
 ]
