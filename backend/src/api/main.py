@@ -37,6 +37,8 @@ from src.api.routes import (
     audit_router,
     biomarkers_router
 )
+from src.api.routes.chat import router as chat_router
+from src.api.routes.fhir import router as fhir_router
 
 # Initialize FastAPI
 app = FastAPI(
@@ -63,6 +65,8 @@ app.include_router(guidelines_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(audit_router, prefix="/api/v1")
 app.include_router(biomarkers_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")  # Chat/conversational interface
+app.include_router(fhir_router, prefix="/api/v1")  # FHIR integration
 
 # Global service instance
 lca_service: Optional[LungCancerAssistantService] = None

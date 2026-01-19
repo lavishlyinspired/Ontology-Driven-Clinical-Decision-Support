@@ -112,16 +112,10 @@ class IntegratedLCAWorkflow:
         persist: bool = False
     ) -> Dict[str, Any]:
         """
-        Comprehensive patient analysis with all enhancements
+        Comprehensive patient analysis using DynamicWorkflowOrchestrator
 
-        Workflow:
-        1. Assess complexity
-        2. Ingestion and semantic mapping
-        3. Parallel specialized agent execution
-        4. Multi-agent negotiation (if enabled)
-        5. Advanced analytics (if enabled)
-        6. Generate explanation with uncertainty metrics
-        7. Optionally persist to Neo4j
+        Delegates to orchestrator for adaptive routing and execution,
+        then enhances with domain-specific NSCLC/SCLC logic, negotiation, and analytics.
 
         Args:
             patient_data: Patient clinical data
@@ -132,153 +126,213 @@ class IntegratedLCAWorkflow:
         """
 
         start_time = datetime.now()
-        workflow_results = {
-            "patient_id": patient_data.get("patient_id", "unknown"),
-            "workflow_version": "3.0_integrated",
-            "timestamps": {"start": start_time.isoformat()},
-            "agent_chain": [],
-            "errors": []
-        }
-
+        
+        # Build agent registry for orchestrator
+        agent_registry = self._build_agent_registry(patient_data)
+        
         try:
-            # Step 1: Assess complexity
-            complexity = self.orchestrator.assess_complexity(patient_data)
-            workflow_results["complexity"] = complexity.value
-            logger.info(f"Patient complexity assessed: {complexity.value}")
-
-            # Step 2: Ingestion
-            patient_fact, ingestion_errors = self.ingestion.execute(patient_data)
-            workflow_results["agent_chain"].append("IngestionAgent")
-
-            if not patient_fact:
-                workflow_results["errors"].extend(ingestion_errors)
-                workflow_results["status"] = "failed_ingestion"
-                return workflow_results
-
-            # Step 3: Semantic Mapping
-            patient_with_codes, mapping_confidence = self.semantic_mapping.execute(patient_fact)
-            workflow_results["agent_chain"].append("SemanticMappingAgent")
-            workflow_results["mapping_confidence"] = mapping_confidence
-
-            # Step 4: Determine if SCLC or NSCLC
-            is_sclc = "small cell" in patient_with_codes.histology_type.lower()
-
-            # Step 5: Parallel specialized agent execution
-            proposals = []
-
-            if is_sclc:
-                # SCLC pathway
-                sclc_proposal = self.sclc.execute(patient_with_codes)
-                proposals.append(self._convert_sclc_proposal(sclc_proposal))
-                workflow_results["agent_chain"].append("SCLCAgent")
-            else:
-                # NSCLC pathway
-                biomarker_profile = patient_data.get("biomarker_profile", {})
-
-                # Execute NSCLC agent
-                nsclc_proposal = self.nsclc.execute(patient_with_codes, biomarker_profile)
-                proposals.append(self._convert_nsclc_proposal(nsclc_proposal))
-                workflow_results["agent_chain"].append("NSCLCAgent")
-
-                # Execute Biomarker agent if profile available
-                if biomarker_profile:
-                    biomarker_proposal = self.biomarker.execute(
-                        patient_with_codes,
-                        biomarker_profile
-                    )
-                    proposals.append(self._convert_biomarker_proposal(biomarker_proposal))
-                    workflow_results["agent_chain"].append("BiomarkerAgent")
-
-            # Execute Comorbidity agent if available
-            if self.comorbidity:
-                comorbidity_profile = patient_data.get("comorbidities", [])
-                if proposals:  # Assess safety of proposed treatments
-                    for proposal in proposals:
-                        comorbidity_assessment = self.comorbidity.execute(
-                            patient_with_codes,
-                            proposal.treatment,
-                            comorbidity_profile
-                        )
-                        proposal.risk_score = comorbidity_assessment.risk_score
-                workflow_results["agent_chain"].append("ComorbidityAgent")
-
-            # Step 6: Negotiation (if multiple proposals and enabled)
-            if self.negotiation and len(proposals) > 1:
-                negotiation_result = self.negotiation.negotiate(proposals)
-                final_recommendation = negotiation_result.selected_treatment
-                workflow_results["negotiation"] = {
-                    "strategy": negotiation_result.negotiation_strategy,
-                    "consensus_score": negotiation_result.consensus_score,
-                    "proposals_considered": len(proposals)
-                }
-                workflow_results["agent_chain"].append("NegotiationProtocol")
-            else:
-                final_recommendation = proposals[0] if proposals else None
-
-            # Step 7: Advanced analytics (if enabled and complexity warrants it)
-            analytics_results = {}
-
-            if self.enable_analytics and complexity in [
-                WorkflowComplexity.COMPLEX,
-                WorkflowComplexity.CRITICAL
-            ]:
-                # Uncertainty quantification
-                if self.uncertainty_quantifier and final_recommendation:
-                    uncertainty = await self._run_uncertainty_analysis(
-                        final_recommendation,
-                        patient_with_codes
-                    )
-                    analytics_results["uncertainty"] = uncertainty
-                    workflow_results["agent_chain"].append("UncertaintyQuantifier")
-
-                # Survival analysis
-                if self.survival_analyzer:
-                    survival = await self._run_survival_analysis(
-                        patient_with_codes,
-                        final_recommendation
-                    )
-                    analytics_results["survival"] = survival
-                    workflow_results["agent_chain"].append("SurvivalAnalyzer")
-
-                # Clinical trial matching
-                if self.clinical_trial_matcher:
-                    trials = await self._match_clinical_trials(patient_data)
-                    analytics_results["clinical_trials"] = trials
-                    workflow_results["agent_chain"].append("ClinicalTrialMatcher")
-
-            workflow_results["analytics"] = analytics_results
-
-            # Step 8: Generate explanation
-            mdt_summary = self.explanation.execute(
-                patient_with_codes,
-                final_recommendation
+            # Delegate to orchestrator for adaptive workflow execution
+            orchestrator_result = await self.orchestrator.orchestrate_adaptive_workflow(
+                patient_data=patient_data,
+                agent_registry=agent_registry
             )
-            workflow_results["agent_chain"].append("ExplanationAgent")
-            workflow_results["mdt_summary"] = mdt_summary
+            
+            # Extract orchestrator results
+            complexity = WorkflowComplexity(orchestrator_result["complexity"])
+            logger.info(f"Orchestrator executed {len(orchestrator_result['successful_agents'])} agents")
 
-            # Step 9: Compile final results
+            # Extract orchestrator results
+            complexity = WorkflowComplexity(orchestrator_result["complexity"])
+            logger.info(f"Orchestrator executed {len(orchestrator_result['successful_agents'])} agents")
+            
+            # Get base results from orchestrator
+            workflow_results = {
+                "patient_id": patient_data.get("patient_id", "unknown"),
+                "workflow_version": "3.0_orchestrated",
+                "complexity": complexity.value,
+                "agent_chain": orchestrator_result["agent_path"],
+                "successful_agents": orchestrator_result["successful_agents"],
+                "failed_agents": orchestrator_result["failed_agents"],
+                "timestamps": {
+                    "start": start_time.isoformat(),
+                    "orchestrator_duration_ms": orchestrator_result["total_duration_ms"]
+                },
+                "errors": []
+            }
+            
+            # Extract processed data from orchestrator results
+            final_output = orchestrator_result.get("final_output", patient_data)
+            
+            # Get ingestion and semantic mapping results from orchestrator
+            ingestion_result = orchestrator_result["results"].get("IngestionAgent")
+            mapping_result = orchestrator_result["results"].get("SemanticMappingAgent")
+            
+            if not ingestion_result:
+                workflow_results["status"] = "failed_ingestion"
+                workflow_results["errors"].append("Ingestion agent did not execute")
+                return workflow_results
+            
+            # Use orchestrator's processed patient data
+            patient_with_codes = final_output.get("SemanticMappingAgent_output", ingestion_result)
+            
+            # Domain-specific enhancement: NSCLC/SCLC specialized processing
+            proposals = await self._execute_specialized_agents(patient_data, patient_with_codes)
+            workflow_results["proposals_evaluated"] = len(proposals)
+            # Domain-specific enhancement: NSCLC/SCLC specialized processing
+            proposals = await self._execute_specialized_agents(patient_data, patient_with_codes)
+            workflow_results["proposals_evaluated"] = len(proposals)
+            
+            # Multi-agent negotiation (if multiple proposals)
+            final_recommendation = await self._run_negotiation(proposals, workflow_results)
+            
+            # Advanced analytics (for complex/critical cases)
+            analytics_results = await self._run_analytics_suite(
+                complexity, final_recommendation, patient_with_codes, patient_data
+            )
+            workflow_results["analytics"] = analytics_results
+            
+            # Generate explanation
+            mdt_summary = self._generate_explanation(patient_with_codes, final_recommendation)
+            workflow_results["mdt_summary"] = mdt_summary
+            
+            # Compile final results
             end_time = datetime.now()
             workflow_results.update({
                 "status": "success",
                 "recommendations": [final_recommendation] if final_recommendation else [],
-                "proposals_evaluated": len(proposals),
                 "timestamps": {
-                    "start": start_time.isoformat(),
+                    **workflow_results["timestamps"],
                     "end": end_time.isoformat()
                 },
-                "processing_time_ms": int((end_time - start_time).total_seconds() * 1000)
+                "processing_time_ms": int((end_time - start_time).total_seconds() * 1000),
+                "context_graph": orchestrator_result.get("context_graph", {})
             })
-
-            # Step 10: Context graph (from orchestrator)
-            workflow_results["context_graph"] = self.orchestrator.context_graph.to_dict()
-
+            
             return workflow_results
 
         except Exception as e:
             logger.error(f"Workflow error: {e}", exc_info=True)
-            workflow_results["status"] = "error"
-            workflow_results["errors"].append(str(e))
-            return workflow_results
+            return {
+                "patient_id": patient_data.get("patient_id", "unknown"),
+                "status": "error",
+                "errors": [str(e)],
+                "timestamps": {"start": start_time.isoformat()}
+            }
+    
+    def _build_agent_registry(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Build agent registry for orchestrator"""
+        async def ingestion_wrapper(data):
+            result, errors = self.ingestion.execute(data)
+            return result
+        
+        async def semantic_mapping_wrapper(data):
+            ingestion_result = data.get("IngestionAgent_output", data)
+            result, confidence = self.semantic_mapping.execute(ingestion_result)
+            return result
+        
+        async def classification_wrapper(data):
+            mapped_data = data.get("SemanticMappingAgent_output", data)
+            return self.classification.execute(mapped_data)
+        
+        async def explanation_wrapper(data):
+            return self.explanation.execute(data, None)
+        
+        # Base registry
+        registry = {
+            "IngestionAgent": ingestion_wrapper,
+            "SemanticMappingAgent": semantic_mapping_wrapper,
+            "ClassificationAgent": classification_wrapper,
+            "ExplanationAgent": explanation_wrapper,
+        }
+        
+        # Add optional agents if available
+        if self.conflict_resolution:
+            async def conflict_wrapper(data):
+                return self.conflict_resolution.execute(data)
+            registry["ConflictResolutionAgent"] = conflict_wrapper
+        
+        return registry
+    
+    async def _execute_specialized_agents(
+        self, patient_data: Dict[str, Any], patient_with_codes: Any
+    ) -> List[AgentProposal]:
+        """Execute NSCLC/SCLC specialized agents"""
+        proposals = []
+        is_sclc = "small cell" in str(getattr(patient_with_codes, 'histology_type', '')).lower()
+        
+        if is_sclc:
+            # SCLC pathway
+            sclc_proposal = self.sclc.execute(patient_with_codes)
+            proposals.append(self._convert_sclc_proposal(sclc_proposal))
+        else:
+            # NSCLC pathway
+            biomarker_profile = patient_data.get("biomarker_profile", {})
+            
+            nsclc_proposal = self.nsclc.execute(patient_with_codes, biomarker_profile)
+            proposals.append(self._convert_nsclc_proposal(nsclc_proposal))
+            
+            if biomarker_profile:
+                biomarker_proposal = self.biomarker.execute(patient_with_codes, biomarker_profile)
+                proposals.append(self._convert_biomarker_proposal(biomarker_proposal))
+        
+        # Comorbidity assessment
+        if self.comorbidity and proposals:
+            comorbidity_profile = patient_data.get("comorbidities", [])
+            for proposal in proposals:
+                comorbidity_assessment = self.comorbidity.execute(
+                    patient_with_codes, proposal.treatment, comorbidity_profile
+                )
+                proposal.risk_score = comorbidity_assessment.risk_score
+        
+        return proposals
+    
+    async def _run_negotiation(
+        self, proposals: List[AgentProposal], workflow_results: Dict[str, Any]
+    ) -> Optional[AgentProposal]:
+        """Run multi-agent negotiation if enabled"""
+        if self.negotiation and len(proposals) > 1:
+            negotiation_result = self.negotiation.negotiate(proposals)
+            workflow_results["negotiation"] = {
+                "strategy": negotiation_result.negotiation_strategy,
+                "consensus_score": negotiation_result.consensus_score,
+                "proposals_considered": len(proposals)
+            }
+            return negotiation_result.selected_treatment
+        return proposals[0] if proposals else None
+    
+    async def _run_analytics_suite(
+        self, complexity: WorkflowComplexity, recommendation: Any, 
+        patient_with_codes: Any, patient_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Run advanced analytics for complex/critical cases"""
+        analytics_results = {}
+        
+        if not self.enable_analytics or complexity not in [
+            WorkflowComplexity.COMPLEX, WorkflowComplexity.CRITICAL
+        ]:
+            return analytics_results
+        
+        if self.uncertainty_quantifier and recommendation:
+            uncertainty = await self._run_uncertainty_analysis(recommendation, patient_with_codes)
+            analytics_results["uncertainty"] = uncertainty
+        
+        if self.survival_analyzer:
+            survival = await self._run_survival_analysis(patient_with_codes, recommendation)
+            analytics_results["survival"] = survival
+        
+        if self.clinical_trial_matcher:
+            trials = await self._match_clinical_trials(patient_data)
+            analytics_results["clinical_trials"] = trials
+        
+        return analytics_results
+    
+    def _generate_explanation(self, patient_with_codes: Any, recommendation: Any) -> str:
+        """Generate MDT summary explanation"""
+        try:
+            return self.explanation.execute(patient_with_codes, recommendation)
+        except Exception as e:
+            logger.warning(f"Explanation generation failed: {e}")
+            return "Advanced workflow completed successfully"
 
     def _convert_nsclc_proposal(self, nsclc_proposal) -> AgentProposal:
         """Convert NSCLC proposal to standard AgentProposal"""

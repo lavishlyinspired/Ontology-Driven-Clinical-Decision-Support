@@ -42,6 +42,19 @@ from src.agents.lca_workflow import LCAWorkflow, analyze_patient
 # Import 2025 enhanced tools
 from src.mcp_server.enhanced_tools import register_enhanced_tools
 from src.mcp_server.adaptive_tools import register_adaptive_tools
+from src.mcp_server.advanced_mcp_tools import register_advanced_mcp_tools
+from src.mcp_server.comprehensive_tools import register_comprehensive_tools
+
+# Import new 2025-2026 services
+from src.services.auth_service import auth_service
+from src.services.audit_service import audit_logger, AuditAction
+from src.services.hitl_service import hitl_service
+from src.services.analytics_service import analytics_service
+from src.services.rag_service import rag_service
+from src.services.websocket_service import websocket_service
+from src.services.version_service import version_service
+from src.services.batch_service import batch_service
+from src.services.fhir_service import fhir_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -954,6 +967,17 @@ class LCAMCPServer:
         except Exception as e:
             logger.warning(f"Could not register adaptive tools: {e}")
             logger.warning("Continuing without adaptive workflow capabilities")
+        
+        # ========================================
+        # REGISTER ADVANCED MCP TOOLS (INTEGRATED WORKFLOW + PROVENANCE)
+        # ========================================
+        logger.info("Registering advanced workflow and provenance tools...")
+        try:
+            register_advanced_mcp_tools(self.server, self)
+            logger.info("✓ Advanced tools registered: complexity assessment, integrated workflow, provenance tracking")
+        except Exception as e:
+            logger.warning(f"Could not register advanced MCP tools: {e}")
+            logger.warning("Continuing without advanced workflow integration")
 
     def _categorize_concept(self, name: str) -> str:
         """Categorize a SNOMED concept by name."""

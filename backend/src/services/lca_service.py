@@ -16,10 +16,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.agents.lca_agents import create_lca_workflow, PatientState
+from src.agents.integrated_workflow import IntegratedLCAWorkflow
+from src.agents.dynamic_orchestrator import DynamicWorkflowOrchestrator, WorkflowComplexity
 from src.ontology.lucada_ontology import LUCADAOntology
 from src.ontology.guideline_rules import GuidelineRuleEngine
 from src.db.neo4j_schema import LUCADAGraphDB, Neo4jConfig
 from src.db.vector_store import LUCADAVectorStore
+from src.db.provenance_tracker import ProvenanceTracker, get_provenance_tracker
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,6 +52,12 @@ class PatientDecisionSupport:
     mdt_summary: str
     similar_patients: List[Dict[str, Any]]
     semantic_guidelines: List[Dict[str, Any]]
+    
+    # Enhanced metadata
+    workflow_type: str = "basic"  # "basic", "6-agent", "integrated"
+    complexity_level: Optional[str] = None
+    provenance_record_id: Optional[str] = None
+    execution_time_ms: Optional[int] = None
 
 
 class LungCancerAssistantService:
@@ -68,7 +77,9 @@ class LungCancerAssistantService:
         ontology_path: str = "lucada_ontology.owl",
         use_neo4j: bool = False,
         use_vector_store: bool = True,
-        neo4j_config: Optional[Neo4jConfig] = None
+        neo4j_config: Optional[Neo4jConfig] = None,
+        enable_advanced_workflow: bool = True,
+        enable_provenance: bool = True
     ):
         """
         Initialize the LCA service.
@@ -78,6 +89,8 @@ class LungCancerAssistantService:
             use_neo4j: Enable Neo4j graph database
             use_vector_store: Enable vector store for semantic search
             neo4j_config: Optional Neo4j configuration
+            enable_advanced_workflow: Enable complexity-based routing to advanced workflow
+            enable_provenance: Enable comprehensive provenance tracking
         """
         logger.info("Initializing Lung Cancer Assistant Service...")
 
@@ -92,10 +105,45 @@ class LungCancerAssistantService:
         self.rule_engine = GuidelineRuleEngine(self.ontology)
         logger.info(f"✓ Loaded {len(self.rule_engine.rules)} guideline rules")
 
-        # Initialize LangGraph workflow
+        # Initialize basic LangGraph workflow
         logger.info("Creating AI agent workflow...")
         self.workflow = create_lca_workflow()
         logger.info("✓ LangGraph workflow ready")
+        
+        # Initialize advanced workflow components
+        self.enable_advanced_workflow = enable_advanced_workflow
+        self.orchestrator = None
+        self.integrated_workflow = None
+        
+        if enable_advanced_workflow:
+            logger.info("Initializing advanced workflow components...")
+            # Initialize Neo4j tools first for integrated workflow
+            neo4j_tools = None
+            if use_neo4j and neo4j_config:
+                try:
+                    from src.db.neo4j_tools import Neo4jReadTools, Neo4jWriteTools
+                    neo4j_tools = {
+                        'read': Neo4jReadTools(neo4j_config),
+                        'write': Neo4jWriteTools(neo4j_config)
+                    }
+                except Exception as e:
+                    logger.warning(f"Neo4j tools initialization failed: {e}")
+            
+            self.orchestrator = DynamicWorkflowOrchestrator()
+            self.integrated_workflow = IntegratedLCAWorkflow(
+                neo4j_tools=neo4j_tools,
+                enable_analytics=True,
+                enable_negotiation=True
+            )
+            logger.info("✓ Advanced workflow ready")
+        
+        # Initialize provenance tracking
+        self.enable_provenance = enable_provenance
+        self.provenance_tracker = None
+        if enable_provenance:
+            logger.info("Initializing provenance tracking...")
+            self.provenance_tracker = get_provenance_tracker()
+            logger.info("✓ Provenance tracker ready")
 
         # Initialize Neo4j (optional)
         self.graph_db = None
@@ -146,24 +194,73 @@ class LungCancerAssistantService:
     async def process_patient(
         self,
         patient_data: Dict[str, Any],
-        use_ai_workflow: bool = True
+        use_ai_workflow: bool = True,
+        force_advanced: bool = False
     ) -> PatientDecisionSupport:
         """
         Process a patient through the full decision support pipeline.
+        
+        Automatically routes to advanced workflow for complex cases.
 
         Args:
             patient_data: Patient clinical data
             use_ai_workflow: Whether to run AI agent workflow (takes ~20s)
+            force_advanced: Force use of advanced integrated workflow
 
         Returns:
-            Complete decision support with recommendations
+            Complete decision support with recommendations and provenance
         """
+        start_time = datetime.utcnow()
         patient_id = patient_data.get("patient_id") or str(uuid.uuid4())[:8].upper()
         patient_data["patient_id"] = patient_id
 
         logger.info(f"\n{'=' * 80}")
         logger.info(f"Processing Patient: {patient_id}")
         logger.info(f"{'=' * 80}")
+        
+        # Start provenance tracking
+        provenance_session_id = None
+        if self.enable_provenance and self.provenance_tracker:
+            provenance_session_id = self.provenance_tracker.start_session(
+                patient_id=patient_id,
+                workflow_type="auto",  # Will be determined by orchestrator
+                complexity_level=None
+            )
+            self.provenance_tracker.track_ontology_version("LUCADA", "1.0.0")
+            self.provenance_tracker.track_ontology_version("SNOMED-CT", "2025-01-17")
+        
+        # Route: use advanced workflow if available and enabled, otherwise basic
+        if force_advanced or (self.enable_advanced_workflow and self.integrated_workflow):
+            return await self._execute_integrated_workflow(
+                patient_data, 
+                start_time, 
+                provenance_session_id
+            )
+        else:
+            return await self._execute_basic_workflow(
+                patient_data, 
+                use_ai_workflow, 
+                start_time,
+                provenance_session_id
+            )
+    
+    async def _execute_basic_workflow(
+        self,
+        patient_data: Dict[str, Any],
+        use_ai_workflow: bool,
+        start_time: datetime,
+        provenance_session_id: Optional[str]
+    ) -> PatientDecisionSupport:
+        """Execute patient processing with basic LangGraph workflow"""
+        patient_id = patient_data["patient_id"]
+        complexity_level = "simple"  # Basic workflow handles simple cases
+        
+        logger.info("→ Using BASIC workflow")
+        
+        # Track data ingestion
+        if self.provenance_tracker and provenance_session_id:
+            self.provenance_tracker.track_data_ingestion("user_input", patient_data)
+
 
         # Step 1: Store in Neo4j (if available)
         if self.graph_db and self.graph_db.driver:
@@ -173,8 +270,20 @@ class LungCancerAssistantService:
 
         # Step 2: Run rule-based classification
         logger.info("Classifying with guideline rules...")
+        activity_id = None
+        if self.provenance_tracker:
+            activity_id = self.provenance_tracker.track_agent_execution(
+                agent_name="GuidelineRuleEngine",
+                agent_version="1.0.0",
+                input_entity_ids=[],
+                parameters={"rules_count": len(self.rule_engine.rules)}
+            )
+        
         ontology_recommendations = self.rule_engine.classify_patient(patient_data)
         logger.info(f"✓ Found {len(ontology_recommendations)} applicable guidelines")
+        
+        if self.provenance_tracker and activity_id:
+            self.provenance_tracker.track_agent_completion(activity_id, "classification_result")
 
         # Step 3: Find similar patients (if Neo4j available)
         similar_patients = []
@@ -204,6 +313,15 @@ class LungCancerAssistantService:
 
         if use_ai_workflow:
             logger.info("Running AI agent workflow (this takes ~20 seconds)...")
+            
+            ai_activity_id = None
+            if self.provenance_tracker:
+                ai_activity_id = self.provenance_tracker.track_agent_execution(
+                    agent_name="LangGraphWorkflow",
+                    agent_version="1.0.0",
+                    input_entity_ids=["classification_result"],
+                    parameters={"workflow_type": "basic_langgraph"}
+                )
 
             initial_state: PatientState = {
                 "patient_id": patient_id,
@@ -224,10 +342,15 @@ class LungCancerAssistantService:
                 explanation = final_state.get("explanation", "")
                 arguments = final_state.get("arguments", [])
                 logger.info("✓ AI workflow completed")
+                
+                if self.provenance_tracker and ai_activity_id:
+                    self.provenance_tracker.track_agent_completion(ai_activity_id, "mdt_summary")
 
             except Exception as e:
                 logger.error(f"AI workflow failed: {e}")
                 explanation = f"AI workflow error: {str(e)}"
+                if self.provenance_tracker and ai_activity_id:
+                    self.provenance_tracker.track_agent_completion(ai_activity_id, "error", "failed", str(e))
         else:
             logger.info("Skipping AI workflow (use_ai_workflow=False)")
 
@@ -251,21 +374,219 @@ class LungCancerAssistantService:
             for r in ontology_recommendations
         ]
 
-        result = PatientDecisionSupport(
-            patient_id=patient_id,
-            timestamp=datetime.now(),
-            patient_scenarios=[r.get("rule_name", r.get("rule_id", "")) for r in ontology_recommendations],
-            recommendations=recommendations,
-            mdt_summary=explanation,
-            similar_patients=similar_patients,
-            semantic_guidelines=semantic_guidelines
-        )
+        # Generate MDT summary if we didn't run the full AI workflow
+        if not explanation and recommendations:
+            # Simple summary from rule engine
+            top_rec = recommendations[0] if recommendations else None
+            if top_rec:
+                explanation = f"""
+                **MDT Summary for Patient {patient_id}**
 
+                **Classification**: {patient_data.get('tnm_stage')} {patient_data.get('histology_type')}
+
+                **Primary Recommendation**: {top_rec.treatment_type}
+                - Evidence Level: {top_rec.evidence_level}
+                - Source: {top_rec.rule_source}
+                - Intent: {top_rec.treatment_intent}
+
+                **Total Guidelines Matched**: {len(recommendations)}
+
+                **Note**: This is a rule-based summary. For detailed clinical argumentation,
+                enable the AI workflow.
+                """
+
+        # Compile patient scenarios
+        scenarios = [
+            f"{r.get('rule_id')}: {r.get('recommended_treatment')}"
+            for r in ontology_recommendations
+        ]
+        
+        # End provenance session
+        provenance_record_id = None
+        if self.provenance_tracker and provenance_session_id:
+            record = self.provenance_tracker.end_session()
+            provenance_record_id = record.record_id
+        
+        # Calculate execution time
+        execution_time_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+        
         logger.info(f"{'=' * 80}")
-        logger.info(f"✓ Patient {patient_id} processing complete")
+        logger.info(f"✓ Patient {patient_id} processing complete ({execution_time_ms}ms)")
         logger.info(f"{'=' * 80}\n")
 
-        return result
+        return PatientDecisionSupport(
+            patient_id=patient_id,
+            timestamp=datetime.utcnow(),
+            patient_scenarios=scenarios,
+            recommendations=recommendations,
+            mdt_summary=explanation.strip(),
+            similar_patients=similar_patients,
+            semantic_guidelines=semantic_guidelines,
+            workflow_type="basic",
+            complexity_level=complexity_level,
+            provenance_record_id=provenance_record_id,
+            execution_time_ms=execution_time_ms
+        )
+    
+    async def _execute_integrated_workflow(
+        self,
+        patient_data: Dict[str, Any],
+        start_time: datetime,
+        provenance_session_id: Optional[str]
+    ) -> PatientDecisionSupport:
+        """Execute patient processing with integrated advanced workflow (orchestrator handles routing)"""
+        patient_id = patient_data["patient_id"]
+        
+        logger.info("=" * 80)
+        logger.info("ADVANCED INTEGRATED WORKFLOW (Orchestrated)")
+        logger.info("=" * 80)
+        
+        # Track data ingestion
+        if self.provenance_tracker and provenance_session_id:
+            self.provenance_tracker.track_data_ingestion("user_input", patient_data)
+        
+            # Run integrated workflow (orchestrator handles complexity assessment internally)
+            result = await self.integrated_workflow.analyze_patient_comprehensive(
+                patient_data=patient_data,
+                persist=bool(self.graph_db and self.graph_db.driver)
+            )
+            
+            # Extract complexity from orchestrator's result
+            complexity_level = result.get("complexity", "unknown")
+            logger.info(f"✓ Advanced workflow completed: {result.get('status')} (complexity: {complexity_level})")
+            
+            # Update provenance with actual complexity
+            if self.provenance_tracker and provenance_session_id:
+                self.provenance_tracker.track_agent_execution(
+                    agent_name="IntegratedLCAWorkflow",
+                    agent_version="3.0_orchestrated",
+                    input_entity_ids=[],
+                    parameters={
+                        "complexity_level": complexity_level,
+                        "agent_chain": result.get("agent_chain", [])
+                    }
+                )
+            
+            # Convert integrated workflow result to PatientDecisionSupport
+            recommendations_data = result.get("recommendations", [])
+            recommendations = []
+            
+            for rec in recommendations_data:
+                if isinstance(rec, dict):
+                    recommendations.append(TreatmentRecommendation(
+                        treatment_type=rec.get("treatment", "Unknown"),
+                        rule_id=rec.get("agent_id", ""),
+                        rule_source=rec.get("guideline_reference", "NCCN 2025"),
+                        evidence_level=rec.get("evidence_level", "Grade A"),
+                        treatment_intent=rec.get("treatment_intent", "Unknown"),
+                        survival_benefit=rec.get("expected_benefit"),
+                        contraindications=rec.get("contraindications", []),
+                        priority=90,
+                        confidence_score=rec.get("confidence", 0.85)
+                    ))
+                else:
+                    # Handle AgentProposal objects
+                    recommendations.append(TreatmentRecommendation(
+                        treatment_type=getattr(rec, 'treatment', 'Unknown'),
+                        rule_id=getattr(rec, 'agent_id', ''),
+                        rule_source=getattr(rec, 'guideline_reference', 'NCCN 2025'),
+                        evidence_level=getattr(rec, 'evidence_level', 'Grade A'),
+                        treatment_intent=getattr(rec, 'treatment_intent', 'Unknown'),
+                        survival_benefit=getattr(rec, 'expected_benefit', None),
+                        contraindications=getattr(rec, 'contraindications', []),
+                        priority=90,
+                        confidence_score=getattr(rec, 'confidence', 0.85)
+                    ))
+            
+            # Get MDT summary
+            mdt_summary = result.get("mdt_summary", "Advanced workflow completed successfully")
+            
+            # Compile patient scenarios from agent chain
+            scenarios = result.get("agent_chain", [])
+            
+            # Find similar patients
+            similar_patients = []
+            if self.vector_store:
+                try:
+                    similar_patients = self.vector_store.find_similar_patients(patient_data, limit=3)
+                except Exception as e:
+                    logger.warning(f"Similar patient search failed: {e}")
+            
+            # Get semantic guidelines
+            semantic_guidelines = self.rule_engine.get_semantic_guidelines(patient_data)
+            
+        except Exception as e:
+            logger.error(f"Advanced workflow failed: {e}", exc_info=True)
+            
+            # Fallback to basic workflow
+            logger.info("Falling back to basic workflow...")
+            return await self._execute_basic_workflow(
+                patient_data, True, start_time, provenance_session_id
+            )
+        
+        # End provenance session
+        provenance_record_id = None
+        if self.provenance_tracker and provenance_session_id:
+            record = self.provenance_tracker.end_session()
+            provenance_record_id = record.record_id
+        
+        # Calculate execution time
+        execution_time_ms = result.get("processing_time_ms", int((datetime.utcnow() - start_time).total_seconds() * 1000))
+        
+        logger.info(f"{'=' * 80}")
+        logger.info(f"✓ Patient {patient_id} advanced workflow complete ({execution_time_ms}ms)")
+        logger.info(f"{'=' * 80}\n")
+        
+        return PatientDecisionSupport(
+            patient_id=patient_id,
+            timestamp=datetime.utcnow(),
+            patient_scenarios=scenarios,
+            recommendations=recommendations,
+            mdt_summary=mdt_summary,
+            similar_patients=[],  # Integrated workflow handles this internally
+            semantic_guidelines=[],
+            workflow_type="integrated",
+            complexity_level=complexity_level,
+            provenance_record_id=provenance_record_id,
+            execution_time_ms=execution_time_ms
+        )
+    
+    def get_provenance_record(self, record_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve provenance record for audit/compliance"""
+        if not self.provenance_tracker:
+            return None
+        return self.provenance_tracker.export_record(record_id)
+    
+    def query_patient_provenance(self, patient_id: str) -> List[Dict[str, Any]]:
+        """Get all provenance records for a patient"""
+        if not self.provenance_tracker:
+            return []
+        records = self.provenance_tracker.query_by_patient(patient_id)
+        return [r.to_dict() for r in records]
+    
+    async def assess_complexity(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Assess patient complexity and return routing recommendation"""
+        if not self.orchestrator:
+            return {
+                "complexity": "unknown",
+                "recommended_workflow": "basic",
+                "reason": "Advanced workflow not enabled"
+            }
+        
+        complexity = self.orchestrator.assess_complexity(patient_data)
+        use_advanced = complexity in [WorkflowComplexity.COMPLEX, WorkflowComplexity.CRITICAL]
+        
+        return {
+            "complexity": complexity.value,
+            "recommended_workflow": "integrated" if use_advanced else "basic",
+            "reason": f"Complexity level: {complexity.value}",
+            "factors": {
+                "stage": patient_data.get("tnm_stage"),
+                "performance_status": patient_data.get("performance_status"),
+                "comorbidities_count": len(patient_data.get("comorbidities", [])),
+                "biomarkers_available": bool(patient_data.get("biomarker_profile"))
+            }
+        }
 
     def get_system_stats(self) -> Dict[str, Any]:
         """Get comprehensive system statistics"""
@@ -287,6 +608,11 @@ class LungCancerAssistantService:
                     for r in self.rule_engine.get_all_rules()
                 ]
             },
+            "workflows": {
+                "basic": "enabled",
+                "advanced_integrated": "enabled" if self.enable_advanced_workflow else "disabled",
+                "provenance_tracking": "enabled" if self.enable_provenance else "disabled"
+            },
             "neo4j": {
                 "enabled": self.graph_db is not None and self.graph_db.driver is not None,
                 "status": "connected" if (self.graph_db and self.graph_db.driver) else "disabled"
@@ -296,6 +622,7 @@ class LungCancerAssistantService:
                 "documents": self.vector_store.collection.count() if self.vector_store else 0
             }
         }
+
 
         return stats
 

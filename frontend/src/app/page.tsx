@@ -72,6 +72,10 @@ export default function HomePage() {
           ))}
         </div>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1.5rem" }}>
+          <Link href="/chat" className="glow-border card" style={{ flex: 1, textAlign: "center" }}>
+            <strong>💬 Chat Assistant</strong>
+            <p style={{ margin: "0.4rem 0 0" }}>Conversational analysis</p>
+          </Link>
           <Link href="/patients" className="glow-border card" style={{ flex: 1, textAlign: "center" }}>
             <strong>Run a practice patient</strong>
             <p style={{ margin: "0.4rem 0 0" }}>Jenny Sesen + modern cohorts</p>
