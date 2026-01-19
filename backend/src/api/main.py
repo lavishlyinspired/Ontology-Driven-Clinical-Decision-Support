@@ -11,8 +11,10 @@ Provides RESTful endpoints for clinical decision support
 6. ExplanationAgent: Generates MDT summaries
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -20,6 +22,17 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+import logging
+import json
+import time
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+
+# Configure structured logging
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -57,6 +70,13 @@ from src.services.batch_service import batch_service
 from src.services.fhir_service import fhir_service
 from src.services.cache_service import cache_service
 
+# ==================== Prometheus Metrics ====================
+if os.getenv("METRICS_ENABLED", "true").lower() == "true":
+    REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
+    REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency', ['method', 'endpoint'])
+    PATIENT_ANALYSIS_COUNT = Counter('patient_analysis_total', 'Total patient analyses', ['status'])
+    PATIENT_ANALYSIS_LATENCY = Histogram('patient_analysis_duration_seconds', 'Patient analysis latency')
+
 # Initialize FastAPI
 app = FastAPI(
     title="Lung Cancer Assistant API",
@@ -66,14 +86,123 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS middleware
+# ==================== Security & Performance Middleware ====================
+
+# CORS with environment-based origins
+allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-RateLimit-Remaining"]
 )
+
+# GZip compression for responses > 1KB
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Trusted host protection
+if os.getenv("ENVIRONMENT") == "production":
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*.lca-system.com", "localhost"])
+
+
+# ==================== Request Logging Middleware ====================
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all HTTP requests with timing and metrics"""
+    request_id = request.headers.get("X-Request-ID", f"req_{int(time.time() * 1000)}")
+    start_time = time.time()
+    
+    # Log request
+    logger.info(f"[{request_id}] {request.method} {request.url.path}", extra={
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "client_ip": request.client.host
+    })
+    
+    # Process request
+    try:
+        response = await call_next(request)
+        
+        # Calculate latency
+        latency = time.time() - start_time
+        
+        # Log response
+        logger.info(f"[{request_id}] {response.status_code} {latency:.3f}s", extra={
+            "request_id": request_id,
+            "status_code": response.status_code,
+            "latency_seconds": latency
+        })
+        
+        # Update Prometheus metrics
+        if os.getenv("METRICS_ENABLED", "true").lower() == "true":
+            REQUEST_COUNT.labels(
+                method=request.method,
+                endpoint=request.url.path,
+                status=response.status_code
+            ).inc()
+            REQUEST_LATENCY.labels(
+                method=request.method,
+                endpoint=request.url.path
+            ).observe(latency)
+        
+        # Add custom headers
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Response-Time"] = f"{latency:.3f}s"
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"[{request_id}] Request failed: {str(e)}", extra={
+            "request_id": request_id,
+            "error": str(e),
+            "error_type": type(e).__name__
+        })
+        raise
+
+
+# ==================== Rate Limiting Middleware ====================
+
+rate_limit_storage = {}  # Simple in-memory storage (use Redis in production)
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    """Simple rate limiting middleware"""
+    if os.getenv("RATE_LIMIT_ENABLED", "true").lower() != "true":
+        return await call_next(request)
+    
+    client_ip = request.client.host
+    current_minute = int(time.time() / 60)
+    key = f"{client_ip}:{current_minute}"
+    
+    # Get current request count
+    request_count = rate_limit_storage.get(key, 0)
+    limit = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+    
+    if request_count >= limit:
+        return Response(
+            content=json.dumps({"error": "Rate limit exceeded. Please try again later."}),
+            status_code=429,
+            media_type="application/json",
+            headers={"X-RateLimit-Remaining": "0"}
+        )
+    
+    # Increment counter
+    rate_limit_storage[key] = request_count + 1
+    
+    # Clean old entries (simple cleanup)
+    if len(rate_limit_storage) > 10000:
+        old_keys = [k for k in rate_limit_storage.keys() if int(k.split(":")[1]) < current_minute - 5]
+        for k in old_keys:
+            del rate_limit_storage[k]
+    
+    response = await call_next(request)
+    response.headers["X-RateLimit-Remaining"] = str(limit - request_count - 1)
+    
+    return response
 
 # Include modular routes
 app.include_router(patients_router, prefix="/api/v1")
@@ -395,6 +524,19 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "service": "operational"
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint
+    
+    Returns metrics in Prometheus text format for scraping
+    """
+    if os.getenv("METRICS_ENABLED", "true").lower() != "true":
+        raise HTTPException(status_code=404, detail="Metrics disabled")
+    
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/api/v1/patients/analyze", response_model=DecisionSupportResponse)
