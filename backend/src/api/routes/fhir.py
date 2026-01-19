@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from ..services.fhir_service import fhir_service
-from ..agents.integrated_workflow import integrated_workflow
+from ..agents.integrated_workflow import analyze_patient_comprehensive
 from ..services.audit_service import audit_logger, AuditAction
 
 router = APIRouter(prefix="/fhir", tags=["FHIR Integration"])
@@ -412,7 +412,7 @@ async def process_fhir_analysis_background(
     """Background task to process FHIR-imported patient through analysis workflow."""
     try:
         # Run integrated workflow
-        result = await integrated_workflow.analyze_patient_comprehensive(
+        result = await analyze_patient_comprehensive(
             patient_data,
             persist=analysis_options.get('persist', True)
         )

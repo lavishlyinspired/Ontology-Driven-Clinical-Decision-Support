@@ -979,6 +979,17 @@ class LCAMCPServer:
             logger.warning(f"Could not register advanced MCP tools: {e}")
             logger.warning("Continuing without advanced workflow integration")
 
+        # ========================================
+        # REGISTER COMPREHENSIVE 2025-2026 TOOLS
+        # ========================================
+        logger.info("Registering comprehensive 2025-2026 service tools...")
+        try:
+            register_comprehensive_tools(self.server, self)
+            logger.info("✓ Comprehensive tools registered: auth, audit, hitl, analytics, rag, websocket, version, batch, fhir")
+        except Exception as e:
+            logger.warning(f"Could not register comprehensive tools: {e}")
+            logger.warning("Continuing without comprehensive service integration")
+
     def _categorize_concept(self, name: str) -> str:
         """Categorize a SNOMED concept by name."""
         if any(x in name for x in ["ps_grade", "performance"]):

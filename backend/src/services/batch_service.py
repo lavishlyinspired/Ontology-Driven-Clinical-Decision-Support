@@ -461,6 +461,7 @@ class BatchProcessor:
 
 # Global batch processor instance
 batch_processor = BatchProcessor()
+batch_service = batch_processor  # Alias for consistency with other services
 
 
 # Example task handlers

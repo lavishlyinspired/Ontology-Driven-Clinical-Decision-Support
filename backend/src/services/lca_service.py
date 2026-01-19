@@ -445,6 +445,7 @@ class LungCancerAssistantService:
         if self.provenance_tracker and provenance_session_id:
             self.provenance_tracker.track_data_ingestion("user_input", patient_data)
         
+        try:
             # Run integrated workflow (orchestrator handles complexity assessment internally)
             result = await self.integrated_workflow.analyze_patient_comprehensive(
                 patient_data=patient_data,

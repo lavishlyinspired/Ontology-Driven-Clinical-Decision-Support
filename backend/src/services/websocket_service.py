@@ -263,6 +263,7 @@ class WebSocketManager:
 
 # Global WebSocket manager instance
 ws_manager = WebSocketManager()
+websocket_service = ws_manager  # Alias for consistency with other services
 
 
 # Channel names for different event types

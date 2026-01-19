@@ -509,6 +509,7 @@ class GuidelineVersionManager:
 
 # Global version manager instance
 version_manager = GuidelineVersionManager()
+version_service = version_manager  # Alias for consistency with other services
 
 
 # Initialize default NCCN versions
