@@ -38,6 +38,14 @@ seaborn
 # FastAPI (Optional - for REST API)
 fastapi
 uvicorn[standard]
+python-multipart  # For file uploads
+
+# File Processing
+PyPDF2  # PDF parsing
+python-docx  # DOCX parsing
+
+# PDF Generation
+reportlab  # PDF report generation
 
 # Utilities
 httpx

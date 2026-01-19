@@ -35,6 +35,36 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
+from src.ontology.lucada_ontology import LUCADAOntology
+from src.ontology.guideline_rules import GuidelineRuleEngine
+from src.ontology.snomed_loader import SNOMEDLoader
+from src.agents.lca_agents import create_lca_workflow
+
+# Import new 6-agent architecture
+from src.agents.ingestion_agent import IngestionAgent
+from src.agents.semantic_mapping_agent import SemanticMappingAgent
+from src.agents.classification_agent import ClassificationAgent
+from src.agents.conflict_resolution_agent import ConflictResolutionAgent
+from src.agents.explanation_agent import ExplanationAgent
+from src.agents.lca_workflow import LCAWorkflow, analyze_patient
+
+# Import 2025 enhanced tools
+from src.mcp_server.enhanced_tools import register_enhanced_tools
+from src.mcp_server.adaptive_tools import register_adaptive_tools
+from src.mcp_server.advanced_mcp_tools import register_advanced_mcp_tools
+from src.mcp_server.comprehensive_tools import register_comprehensive_tools
+
+# Import new 2025-2026 services
+from src.services.auth_service import auth_service
+from src.services.audit_service import audit_logger, AuditAction
+from src.services.hitl_service import hitl_service
+from src.services.analytics_service import analytics_service
+from src.services.rag_service import rag_service
+from src.services.websocket_service import websocket_service
+from src.services.version_service import version_service
+from src.services.batch_service import batch_service
+from src.services.fhir_service import fhir_service
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -1464,157 +1494,130 @@ class LCAMCPServer:
             "disclaimer": mdt_summary.disclaimer
         }
 
-    # ===========================================
-    # TOOL HANDLERS - SPECIALIZED AGENTS
-    # ===========================================
+                return [TextContent(
+                    type="text",
+                    text=json.dumps(result, indent=2, default=str)
+                )]
 
-    async def _handle_run_nsclc_agent(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Run NSCLC-specific agent"""
-        from src.agents.nsclc_agent import NSCLCAgent
-        from src.agents.ingestion_agent import IngestionAgent
-        from src.agents.semantic_mapping_agent import SemanticMappingAgent
+            except Exception as e:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({"status": "error", "message": str(e)}, indent=2)
+                )]
 
-        patient_data = args.get("patient_data", args)
-        biomarker_profile = args.get("biomarker_profile", {})
+        # Tool 18: Validate Patient Against Schema
+        @self.server.call_tool()
+        async def validate_patient_schema(arguments: Dict[str, Any]) -> List[TextContent]:
+            """
+            Validate patient data against the LUCADA schema without processing.
 
-        ingestion = IngestionAgent()
-        patient_fact, errors = ingestion.execute(patient_data)
-        if not patient_fact:
-            return {"status": "error", "message": "Ingestion failed", "errors": errors}
+            Args:
+                patient_data: Patient data to validate
+            """
+            try:
+                patient_data = arguments.get("patient_data", arguments)
+                
+                agent = IngestionAgent()
+                
+                # Check required fields
+                errors = []
+                required = ["tnm_stage", "histology_type"]
+                
+                for field in required:
+                    if field not in patient_data or not patient_data[field]:
+                        errors.append(f"Missing required field: {field}")
+                
+                # Validate TNM stage
+                valid_stages = ["I", "IA", "IB", "II", "IIA", "IIB", "III", "IIIA", "IIIB", "IIIC", "IV", "IVA", "IVB"]
+                stage = patient_data.get("tnm_stage", "")
+                normalized_stage = agent.normalize_tnm(stage)
+                if normalized_stage not in valid_stages:
+                    errors.append(f"Invalid TNM stage: {stage}")
+                
+                # Validate performance status
+                ps = patient_data.get("performance_status")
+                if ps is not None:
+                    try:
+                        ps_int = int(ps)
+                        if ps_int < 0 or ps_int > 4:
+                            errors.append(f"Performance status must be 0-4, got: {ps}")
+                    except ValueError:
+                        errors.append(f"Invalid performance status: {ps}")
+                
+                result = {
+                    "status": "valid" if not errors else "invalid",
+                    "errors": errors,
+                    "normalized_stage": normalized_stage if normalized_stage else None,
+                    "fields_present": list(patient_data.keys())
+                }
 
-        mapping = SemanticMappingAgent()
-        patient_with_codes, _ = mapping.execute(patient_fact)
+                return [TextContent(
+                    type="text",
+                    text=json.dumps(result, indent=2)
+                )]
 
-        agent = NSCLCAgent()
-        proposal = agent.execute(patient_with_codes, biomarker_profile)
+            except Exception as e:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({"status": "error", "message": str(e)}, indent=2)
+                )]
 
-        return {
-            "status": "success",
-            "agent": "NSCLCAgent",
-            "treatment": proposal.treatment,
-            "confidence": proposal.confidence,
-            "evidence_level": proposal.evidence_level,
-            "treatment_intent": proposal.treatment_intent,
-            "rationale": proposal.rationale,
-            "subtype_specific": proposal.subtype_specific,
-            "biomarker_driven": proposal.biomarker_driven,
-            "risk_score": proposal.risk_score
-        }
+        # ========================================
+        # REGISTER 2025 ENHANCED TOOLS
+        # ========================================
+        logger.info("Registering 2025 enhanced tools...")
+        try:
+            enhanced_tool_instances = register_enhanced_tools(self.server, self)
+            self.enhanced_tools = enhanced_tool_instances
+            logger.info("✓ Enhanced tools registered: graph_algorithms, temporal_analyzer, biomarker_agent, uncertainty_quantifier, loinc_integrator")
+        except Exception as e:
+            logger.warning(f"Could not register enhanced tools: {e}")
+            logger.warning("Continuing with basic tools only")
 
-    async def _handle_run_sclc_agent(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Run SCLC-specific agent"""
-        from src.agents.sclc_agent import SCLCAgent
-        from src.agents.ingestion_agent import IngestionAgent
-        from src.agents.semantic_mapping_agent import SemanticMappingAgent
+        # ========================================
+        # REGISTER ADAPTIVE WORKFLOW TOOLS (2026)
+        # ========================================
+        logger.info("Registering adaptive multi-agent workflow tools...")
+        try:
+            adaptive_tool_instances = register_adaptive_tools(self.server, self)
+            self.adaptive_tools = adaptive_tool_instances
+            logger.info("✓ Adaptive tools registered: assess_complexity, run_adaptive_workflow, query_context_graph, execute_parallel_agents")
+        except Exception as e:
+            logger.warning(f"Could not register adaptive tools: {e}")
+            logger.warning("Continuing without adaptive workflow capabilities")
+        
+        # ========================================
+        # REGISTER ADVANCED MCP TOOLS (INTEGRATED WORKFLOW + PROVENANCE)
+        # ========================================
+        logger.info("Registering advanced workflow and provenance tools...")
+        try:
+            register_advanced_mcp_tools(self.server, self)
+            logger.info("✓ Advanced tools registered: complexity assessment, integrated workflow, provenance tracking")
+        except Exception as e:
+            logger.warning(f"Could not register advanced MCP tools: {e}")
+            logger.warning("Continuing without advanced workflow integration")
 
-        patient_data = args.get("patient_data", args)
+        # ========================================
+        # REGISTER COMPREHENSIVE 2025-2026 TOOLS
+        # ========================================
+        logger.info("Registering comprehensive 2025-2026 service tools...")
+        try:
+            register_comprehensive_tools(self.server, self)
+            logger.info("✓ Comprehensive tools registered: auth, audit, hitl, analytics, rag, websocket, version, batch, fhir")
+        except Exception as e:
+            logger.warning(f"Could not register comprehensive tools: {e}")
+            logger.warning("Continuing without comprehensive service integration")
 
-        ingestion = IngestionAgent()
-        patient_fact, errors = ingestion.execute(patient_data)
-        if not patient_fact:
-            return {"status": "error", "message": "Ingestion failed", "errors": errors}
-
-        mapping = SemanticMappingAgent()
-        patient_with_codes, _ = mapping.execute(patient_fact)
-
-        agent = SCLCAgent()
-        proposal = agent.execute(patient_with_codes)
-        notes = agent.generate_sclc_specific_notes(proposal)
-
-        return {
-            "status": "success",
-            "agent": "SCLCAgent",
-            "sclc_stage": proposal.sclc_stage,
-            "treatment": proposal.treatment,
-            "confidence": proposal.confidence,
-            "evidence_level": proposal.evidence_level,
-            "treatment_intent": proposal.treatment_intent,
-            "rationale": proposal.rationale,
-            "prophylactic_cranial_irradiation": proposal.prophylactic_cranial_irradiation,
-            "risk_score": proposal.risk_score,
-            "clinical_notes": notes
-        }
-
-    async def _handle_run_biomarker_agent(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Run biomarker agent"""
-        from src.agents.biomarker_agent import BiomarkerAgent, BiomarkerProfile
-        from src.agents.ingestion_agent import IngestionAgent
-        from src.agents.semantic_mapping_agent import SemanticMappingAgent
-
-        patient_data = args.get("patient_data", args)
-        biomarker_data = args.get("biomarker_profile", {})
-
-        ingestion = IngestionAgent()
-        patient_fact, errors = ingestion.execute(patient_data)
-        if not patient_fact:
-            return {"status": "error", "message": "Ingestion failed", "errors": errors}
-
-        mapping = SemanticMappingAgent()
-        patient_with_codes, _ = mapping.execute(patient_fact)
-
-        biomarker_profile = BiomarkerProfile(
-            egfr_mutation=biomarker_data.get("egfr_mutation"),
-            egfr_mutation_type=biomarker_data.get("egfr_mutation_type"),
-            alk_rearrangement=biomarker_data.get("alk_rearrangement"),
-            ros1_rearrangement=biomarker_data.get("ros1_rearrangement"),
-            braf_mutation=biomarker_data.get("braf_mutation"),
-            pdl1_tps=biomarker_data.get("pdl1_tps"),
-            met_exon14_skipping=biomarker_data.get("met_exon14")
-        )
-
-        agent = BiomarkerAgent()
-        proposal = agent.execute(patient_with_codes, biomarker_profile)
-
-        return {
-            "status": "success",
-            "agent": "BiomarkerAgent",
-            "treatment": proposal.treatment,
-            "confidence": proposal.confidence,
-            "evidence_level": proposal.evidence_level,
-            "treatment_intent": proposal.treatment_intent,
-            "rationale": proposal.rationale,
-            "guideline_reference": proposal.guideline_reference,
-            "risk_score": proposal.risk_score,
-            "contraindications": proposal.contraindications,
-            "expected_benefit": proposal.expected_benefit
-        }
-
-    async def _handle_run_comorbidity_agent(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Run comorbidity agent"""
-        return {
-            "status": "success",
-            "agent": "ComorbidityAgent",
-            "message": "Comorbidity assessment for treatment safety",
-            "patient_id": args.get("patient_data", {}).get("patient_id"),
-            "proposed_treatment": args.get("proposed_treatment"),
-            "comorbidities": args.get("comorbidities", [])
-        }
-
-    async def _handle_recommend_biomarker_testing(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Recommend biomarker tests"""
-        from src.agents.biomarker_agent import BiomarkerAgent
-        from src.agents.ingestion_agent import IngestionAgent
-        from src.agents.semantic_mapping_agent import SemanticMappingAgent
-
-        patient_data = args.get("patient_data", args)
-
-        ingestion = IngestionAgent()
-        patient_fact, _ = ingestion.execute(patient_data)
-
-        if patient_fact:
-            mapping = SemanticMappingAgent()
-            patient_with_codes, _ = mapping.execute(patient_fact)
-
-            agent = BiomarkerAgent()
-            tests = agent.recommend_biomarker_testing(patient_with_codes)
-
-            return {
-                "status": "success",
-                "patient_id": patient_with_codes.patient_id,
-                "histology": patient_with_codes.histology_type,
-                "stage": patient_with_codes.tnm_stage,
-                "recommended_tests": tests
-            }
+    def _categorize_concept(self, name: str) -> str:
+        """Categorize a SNOMED concept by name."""
+        if any(x in name for x in ["ps_grade", "performance"]):
+            return "performance_status"
+        elif any(x in name for x in ["response", "survival", "outcome", "disease"]):
+            return "outcome"
+        elif any(x in name for x in ["therapy", "surgery", "radiation", "chemotherapy", "care"]):
+            return "treatment"
+        elif any(x in name for x in ["lung", "lobe", "bilateral"]):
+            return "anatomy"
         else:
             return {"status": "error", "message": "Patient data validation failed"}
 

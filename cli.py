@@ -7,7 +7,7 @@ Available Commands:
 - check: Verify all prerequisites and services
 - start-api: Launch FastAPI REST server
 - start-mcp: Launch MCP server for Claude Desktop integration
-- run-workflow: Execute 11-agent integrated clinical decision support workflow
+- run-workflow: Execute 6-agent clinical decision support workflow
 - generate-samples: Create sample patient data files
 - test: Run comprehensive system tests
 """
@@ -228,8 +228,8 @@ def run_workflow(
     persist: bool = typer.Option(False, help="Save results to Neo4j"),
     verbose: bool = typer.Option(False, help="Show detailed output"),
 ):
-    """Run the 11-agent integrated clinical decision support workflow."""
-    console.print("\n[bold cyan]═══ LCA 11-AGENT INTEGRATED WORKFLOW ═══[/bold cyan]\n")
+    """Run the 6-agent clinical decision support workflow."""
+    console.print("\n[bold cyan]═══ LCA 6-AGENT WORKFLOW ═══[/bold cyan]\n")
     
     # Load patient data
     if patient_file:
@@ -259,7 +259,7 @@ def run_workflow(
         console.print("[yellow]→[/yellow] Initializing workflow...")
         workflow = LCAWorkflow(persist_results=persist)
         
-        console.print("[yellow]→[/yellow] Running 11-agent integrated pipeline...\n")
+        console.print("[yellow]→[/yellow] Running 6-agent pipeline...\n")
         start_time = time.time()
         
         result = workflow.run(patient_data)
@@ -307,6 +307,248 @@ def run_workflow(
         if verbose:
             import traceback
             console.print(traceback.format_exc())
+        raise typer.Exit(1)
+
+
+@cli.command()
+def run_advanced_workflow(
+    patient_file: Optional[Path] = typer.Option(
+        None, exists=True, help="JSON file with patient data"
+    ),
+    patient_id: Optional[str] = typer.Option(None, help="Use built-in patient by ID"),
+    persist: bool = typer.Option(False, help="Save results to Neo4j"),
+    verbose: bool = typer.Option(False, help="Show detailed output"),
+):
+    """Run the ADVANCED integrated workflow with all enhancements."""
+    console.print("\n[bold magenta]═══ LCA ADVANCED INTEGRATED WORKFLOW ═══[/bold magenta]\n")
+    console.print("[yellow]Features:[/yellow] Complexity routing, specialized agents, analytics, provenance\n")
+    
+    # Load patient data
+    if patient_file:
+        console.print(f"[yellow]→[/yellow] Loading patient from: {patient_file}")
+        with open(patient_file) as f:
+            patient_data = json.load(f)
+    elif patient_id:
+        from data.sample_patients import get_patient_by_id
+        patient_data = get_patient_by_id(patient_id)
+        if not patient_data:
+            console.print(f"[red]✗ Patient {patient_id} not found[/red]")
+            raise typer.Exit(1)
+    else:
+        from data.sample_patients import get_jenny_sesen
+        patient_data = get_jenny_sesen()
+        console.print("[yellow]→[/yellow] Using default patient: Jenny Sesen")
+    
+    console.print(f"\n[cyan]Patient:[/cyan] {patient_data.get('patient_id')}")
+    console.print(f"[cyan]Stage:[/cyan] {patient_data.get('tnm_stage')}")
+    console.print(f"[cyan]Histology:[/cyan] {patient_data.get('histology_type')}\n")
+    
+    try:
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+        
+        from src.services.lca_service import LungCancerAssistantService
+        import asyncio
+        
+        console.print("[yellow]→[/yellow] Initializing service with advanced workflow...")
+        service = LungCancerAssistantService(
+            use_neo4j=persist,
+            use_vector_store=True,
+            enable_advanced_workflow=True,
+            enable_provenance=True
+        )
+        
+        console.print("[yellow]→[/yellow] Running complexity assessment...")
+        
+        # Run advanced workflow
+        start = time.time()
+        
+        async def run():
+            result = await service.process_patient(
+                patient_data=patient_data,
+                use_ai_workflow=True,
+                force_advanced=True
+            )
+            return result
+        
+        result = asyncio.run(run())
+        elapsed = time.time() - start
+        
+        console.print(f"\n[bold green]✓ Advanced Workflow Complete[/bold green] ({elapsed:.2f}s)\n")
+        
+        # Display results
+        table = Table(title="Advanced Workflow Results")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        
+        table.add_row("Patient ID", result.patient_id)
+        table.add_row("Workflow Type", result.workflow_type)
+        table.add_row("Complexity Level", result.complexity_level or "N/A")
+        table.add_row("Execution Time", f"{result.execution_time_ms}ms")
+        table.add_row("Recommendations", str(len(result.recommendations)))
+        table.add_row("Provenance Record", result.provenance_record_id or "N/A")
+        
+        console.print(table)
+        
+        # Display recommendations
+        if result.recommendations:
+            console.print("\n[bold]Top Recommendations:[/bold]")
+            for i, rec in enumerate(result.recommendations[:3], 1):
+                console.print(f"\n{i}. [green]{rec.treatment_type}[/green]")
+                console.print(f"   Evidence: {rec.evidence_level}")
+                console.print(f"   Source: {rec.rule_source}")
+                console.print(f"   Confidence: {rec.confidence_score:.2%}")
+        
+        # Display MDT summary if verbose
+        if verbose and result.mdt_summary:
+            console.print("\n[bold]MDT Summary:[/bold]")
+            console.print(result.mdt_summary)
+        
+        # Display provenance info
+        if result.provenance_record_id:
+            console.print(f"\n[dim]Provenance record saved: {result.provenance_record_id}[/dim]")
+            console.print(f"[dim]Use 'python cli.py show-provenance {result.provenance_record_id}' to view details[/dim]")
+        
+        console.print()
+        
+    except ImportError as e:
+        console.print(f"[red]✗ Import error: {e}[/red]")
+        console.print("  Run: [cyan]python cli.py setup[/cyan]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]✗ Advanced workflow failed: {e}[/red]")
+        if verbose:
+            import traceback
+            console.print(traceback.format_exc())
+        raise typer.Exit(1)
+
+
+@cli.command()
+def assess_complexity(
+    patient_file: Optional[Path] = typer.Option(
+        None, exists=True, help="JSON file with patient data"
+    ),
+    patient_id: Optional[str] = typer.Option(None, help="Use built-in patient by ID"),
+):
+    """Assess patient complexity and get workflow recommendation."""
+    console.print("\n[bold cyan]═══ COMPLEXITY ASSESSMENT ═══[/bold cyan]\n")
+    
+    # Load patient data
+    if patient_file:
+        with open(patient_file) as f:
+            patient_data = json.load(f)
+    elif patient_id:
+        from data.sample_patients import get_patient_by_id
+        patient_data = get_patient_by_id(patient_id)
+        if not patient_data:
+            console.print(f"[red]✗ Patient {patient_id} not found[/red]")
+            raise typer.Exit(1)
+    else:
+        from data.sample_patients import get_jenny_sesen
+        patient_data = get_jenny_sesen()
+    
+    try:
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+        
+        from src.services.lca_service import LungCancerAssistantService
+        import asyncio
+        
+        service = LungCancerAssistantService(
+            enable_advanced_workflow=True
+        )
+        
+        async def run():
+            return await service.assess_complexity(patient_data)
+        
+        result = asyncio.run(run())
+        
+        # Display results
+        table = Table(title=f"Complexity Assessment: {patient_data.get('patient_id')}")
+        table.add_column("Factor", style="cyan")
+        table.add_column("Value", style="yellow")
+        
+        table.add_row("Complexity Level", f"[bold]{result['complexity']}[/bold]")
+        table.add_row("Recommended Workflow", result['recommended_workflow'])
+        table.add_row("Reason", result['reason'])
+        
+        console.print(table)
+        
+        # Display factors
+        console.print("\n[bold]Contributing Factors:[/bold]")
+        factors = result.get('factors', {})
+        for key, value in factors.items():
+            console.print(f"  • {key}: {value}")
+        
+        console.print()
+        
+    except Exception as e:
+        console.print(f"[red]✗ Assessment failed: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@cli.command()
+def show_provenance(
+    record_id: str = typer.Argument(..., help="Provenance record ID")
+):
+    """Display provenance record details for audit/compliance."""
+    console.print(f"\n[bold cyan]═══ PROVENANCE RECORD: {record_id} ═══[/bold cyan]\n")
+    
+    try:
+        import sys
+        sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+        
+        from src.services.lca_service import LungCancerAssistantService
+        
+        service = LungCancerAssistantService(enable_provenance=True)
+        record = service.get_provenance_record(record_id)
+        
+        if not record:
+            console.print(f"[red]✗ Record not found: {record_id}[/red]")
+            raise typer.Exit(1)
+        
+        # Display record summary
+        table = Table(title="Provenance Summary")
+        table.add_column("Attribute", style="cyan")
+        table.add_column("Value", style="green")
+        
+        table.add_row("Record ID", record.get('record_id'))
+        table.add_row("Patient ID", record.get('patient_id'))
+        table.add_row("Workflow Type", record.get('workflow_type'))
+        table.add_row("Complexity", record.get('complexity_routing') or "N/A")
+        table.add_row("Created At", record.get('created_at'))
+        
+        console.print(table)
+        
+        # Display execution chain
+        console.print("\n[bold]Agent Execution Chain:[/bold]")
+        for i, agent in enumerate(record.get('execution_chain', []), 1):
+            console.print(f"  {i}. {agent}")
+        
+        # Display data sources
+        if record.get('data_sources'):
+            console.print("\n[bold]Data Sources:[/bold]")
+            for source in record.get('data_sources', []):
+                console.print(f"  • {source.get('source')} ({source.get('timestamp')})")
+        
+        # Display ontology versions
+        if record.get('ontology_versions'):
+            console.print("\n[bold]Ontology Versions:[/bold]")
+            for onto, version in record.get('ontology_versions', {}).items():
+                console.print(f"  • {onto}: {version}")
+        
+        console.print()
+        
+        # Offer to export
+        export = typer.confirm("Export full record to JSON?", default=False)
+        if export:
+            output_file = PROJECT_ROOT / f"provenance_{record_id}.json"
+            with open(output_file, 'w') as f:
+                json.dump(record, f, indent=2)
+            console.print(f"[green]✓ Exported to: {output_file}[/green]")
+        
+    except Exception as e:
+        console.print(f"[red]✗ Failed to retrieve provenance: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -393,21 +635,20 @@ def list_patients():
 def info():
     """Display project information and architecture overview."""
     console.print("\n[bold cyan]═══ LUNG CANCER ASSISTANT (LCA) ═══[/bold cyan]\n")
-    console.print("[bold]11-Agent Integrated Architecture (2025-2026):[/bold]")
-    console.print("  [yellow]Core Processing (4):[/yellow]")
-    console.print("    • [cyan]IngestionAgent[/cyan] → Validates raw patient data")
-    console.print("    • [cyan]SemanticMappingAgent[/cyan] → Maps to SNOMED-CT/LUCADA codes")
-    console.print("    • [cyan]ExplanationAgent[/cyan] → Generates MDT summaries")
-    console.print("    • [cyan]PersistenceAgent[/cyan] → Saves to Neo4j (ONLY writer)\n")
-    console.print("  [yellow]Specialized Clinical (5):[/yellow]")
-    console.print("    • [cyan]NSCLCAgent[/cyan] → Non-small cell lung cancer treatment")
-    console.print("    • [cyan]SCLCAgent[/cyan] → Small cell lung cancer protocols")
-    console.print("    • [cyan]BiomarkerAgent[/cyan] → Precision medicine analysis")
-    console.print("    • [cyan]ComorbidityAgent[/cyan] → Comorbidity impact assessment")
-    console.print("    • [cyan]NegotiationAgent[/cyan] → Multi-agent consensus\n")
-    console.print("  [yellow]Orchestration (2):[/yellow]")
-    console.print("    • [cyan]DynamicOrchestrator[/cyan] → Intelligent agent routing")
-    console.print("    • [cyan]IntegratedWorkflow[/cyan] → End-to-end coordination\n")
+    console.print("[bold]Core 6-Agent Architecture:[/bold]")
+    console.print("  1. [cyan]IngestionAgent[/cyan]        → Validates raw patient data")
+    console.print("  2. [cyan]SemanticMappingAgent[/cyan]  → Maps to SNOMED-CT codes")
+    console.print("  3. [cyan]ClassificationAgent[/cyan]   → Applies LUCADA ontology + NICE guidelines")
+    console.print("  4. [cyan]ConflictResolutionAgent[/cyan] → Resolves conflicting recommendations")
+    console.print("  5. [cyan]PersistenceAgent[/cyan]      → Saves to Neo4j (ONLY writer)")
+    console.print("  6. [cyan]ExplanationAgent[/cyan]      → Generates MDT summaries\n")
+    
+    console.print("[bold]Advanced Integrated Workflow (2026):[/bold]")
+    console.print("  • [magenta]Dynamic Orchestrator[/magenta]     → Complexity-based routing")
+    console.print("  • [magenta]Specialized Agents[/magenta]       → NSCLC, SCLC, Biomarker agents")
+    console.print("  • [magenta]Negotiation Protocol[/magenta]     → Multi-agent consensus")
+    console.print("  • [magenta]Advanced Analytics[/magenta]       → Survival, uncertainty, clinical trials")
+    console.print("  • [magenta]Provenance Tracking[/magenta]      → Full audit trails (W3C PROV-DM)\n")
     
     console.print("[bold]Technology Stack:[/bold]")
     console.print("  • [yellow]OWL Ontology[/yellow]: LUCADA + SNOMED-CT")
@@ -417,12 +658,19 @@ def info():
     console.print("  • [yellow]Graph DB[/yellow]: Neo4j knowledge graph")
     console.print("  • [yellow]MCP[/yellow]: Claude Desktop integration\n")
     
+    console.print("[bold]Available Workflows:[/bold]")
+    console.print("  1. [green]Standard Workflow[/green]   → Fast, basic cases (20s)")
+    console.print("  2. [magenta]Advanced Workflow[/magenta]   → Complex cases with full analytics (45s)\n")
+    
     console.print("[bold]Quick Start:[/bold]")
-    console.print("  [dim]$[/dim] python cli.py setup          # Install & configure")
-    console.print("  [dim]$[/dim] python cli.py check          # Verify services")
-    console.print("  [dim]$[/dim] python cli.py run-workflow   # Run decision support")
-    console.print("  [dim]$[/dim] python cli.py start-api      # Start REST API")
-    console.print("  [dim]$[/dim] python cli.py start-mcp      # Start MCP server\n")
+    console.print("  [dim]$[/dim] python cli.py setup                # Install & configure")
+    console.print("  [dim]$[/dim] python cli.py check                # Verify services")
+    console.print("  [dim]$[/dim] python cli.py assess-complexity    # Check patient complexity")
+    console.print("  [dim]$[/dim] python cli.py run-workflow         # Run standard workflow")
+    console.print("  [dim]$[/dim] python cli.py run-advanced-workflow # Run advanced workflow")
+    console.print("  [dim]$[/dim] python cli.py show-provenance <id>  # View audit trail")
+    console.print("  [dim]$[/dim] python cli.py start-api            # Start REST API")
+    console.print("  [dim]$[/dim] python cli.py start-mcp            # Start MCP server\n")
 
 
 if __name__ == "__main__":
