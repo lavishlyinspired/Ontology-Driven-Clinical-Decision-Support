@@ -26,16 +26,26 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.services.lca_service import LungCancerAssistantService, TreatmentRecommendation
 from src.agents.lca_workflow import LCAWorkflow, analyze_patient as workflow_analyze
+from src.agents.integrated_workflow import IntegratedLCAWorkflow, analyze_patient_integrated
 from src.db.models import DecisionSupportResponse as WorkflowResponse
+from src.db.neo4j_tools import Neo4jTools
 
 # Import route modules
 from src.api.routes import (
-    patients_router, 
+    patients_router,
+    patient_crud_router,
     treatments_router, 
     guidelines_router,
     analytics_router,
+    analytics_detail_router,
     audit_router,
-    biomarkers_router
+    audit_detail_router,
+    biomarkers_router,
+    patient_similarity_router,
+    biomarker_detail_router,
+    counterfactual_router,
+    export_router,
+    system_router
 )
 
 # Initialize FastAPI
@@ -58,11 +68,19 @@ app.add_middleware(
 
 # Include modular routes
 app.include_router(patients_router, prefix="/api/v1")
+app.include_router(patient_crud_router)  # Already has /api/v1/patients prefix
 app.include_router(treatments_router, prefix="/api/v1")
 app.include_router(guidelines_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(analytics_detail_router)  # Already has /api/v1/analytics prefix
 app.include_router(audit_router, prefix="/api/v1")
+app.include_router(audit_detail_router)  # Already has /api/v1/audit prefix
 app.include_router(biomarkers_router, prefix="/api/v1")
+app.include_router(patient_similarity_router)  # Already has /api/v1/patients prefix
+app.include_router(biomarker_detail_router)  # Already has /api/v1/biomarkers prefix
+app.include_router(counterfactual_router)  # Already has /api/v1/analytics prefix
+app.include_router(export_router)  # Already has /api/v1/export prefix
+app.include_router(system_router, prefix="/api/v1")
 
 # Global service instance
 lca_service: Optional[LungCancerAssistantService] = None
@@ -461,66 +479,79 @@ class WorkflowResponseV2(BaseModel):
 @app.post("/api/v2/patients/analyze", response_model=WorkflowResponseV2)
 async def analyze_patient_v2(
     patient: PatientInputV2,
-    persist_to_neo4j: bool = False
+    persist_to_neo4j: bool = True
 ):
     """
-    Analyze a patient using the new 6-agent workflow.
+    Analyze a patient using the integrated 2025-2026 workflow.
     
-    This endpoint uses the production-ready 6-agent architecture:
-    1. IngestionAgent: Validates and normalizes raw patient data
-    2. SemanticMappingAgent: Maps clinical concepts to SNOMED-CT codes
-    3. ClassificationAgent: Applies LUCADA ontology and NICE guidelines
-    4. ConflictResolutionAgent: Resolves conflicting recommendations
-    5. PersistenceAgent: Saves to Neo4j (if enabled)
-    6. ExplanationAgent: Generates MDT summaries
+    This endpoint uses the production-ready integrated architecture:
+    1. Dynamic complexity assessment
+    2. IngestionAgent: Validates and normalizes raw patient data
+    3. SemanticMappingAgent: Maps clinical concepts to SNOMED-CT codes
+    4. Specialized agents: NSCLC/SCLC/Biomarker/Comorbidity
+    5. Multi-agent negotiation (if multiple proposals)
+    6. Advanced analytics: Survival, uncertainty, clinical trials
+    7. ExplanationAgent: Generates MDT summaries
+    8. PersistenceAgent: Saves to Neo4j (if enabled)
     
     CRITICAL: Only PersistenceAgent writes to Neo4j.
 
     Args:
         patient: Patient clinical data
-        persist_to_neo4j: Whether to save results to Neo4j
+        persist_to_neo4j: Whether to save results to Neo4j (default: True)
 
     Returns:
-        Complete decision support with SNOMED mappings and MDT summary
+        Complete decision support with SNOMED mappings, analytics, and MDT summary
     """
-    global lca_workflow
     
     try:
-        # Initialize workflow if needed
-        if lca_workflow is None:
+        # Initialize Neo4j tools if persistence requested
+        neo4j_tools = None
+        if persist_to_neo4j:
             neo4j_uri = os.getenv("NEO4J_URI")
             neo4j_user = os.getenv("NEO4J_USER") 
             neo4j_password = os.getenv("NEO4J_PASSWORD")
             
-            lca_workflow = LCAWorkflow(
-                neo4j_uri=neo4j_uri,
-                neo4j_user=neo4j_user,
-                neo4j_password=neo4j_password,
-                persist_results=persist_to_neo4j
-            )
+            if neo4j_uri and neo4j_user and neo4j_password:
+                neo4j_tools = Neo4jTools(
+                    uri=neo4j_uri,
+                    user=neo4j_user,
+                    password=neo4j_password
+                )
         
-        # Run workflow
-        result = lca_workflow.run(patient.model_dump())
+        # Initialize integrated workflow
+        workflow = IntegratedLCAWorkflow(
+            neo4j_tools=neo4j_tools,
+            enable_analytics=True,
+            enable_negotiation=True
+        )
         
+        # Run integrated workflow
+        result = await workflow.analyze_patient_comprehensive(
+            patient_data=patient.model_dump(),
+            persist=persist_to_neo4j
+        )
+        
+        # Convert integrated workflow result to API response format
         return WorkflowResponseV2(
-            patient_id=result.patient_id,
-            success=result.success,
-            workflow_status=result.workflow_status,
-            agent_chain=result.agent_chain,
-            scenario=result.scenario,
-            scenario_confidence=result.scenario_confidence,
-            recommendations=result.recommendations,
-            reasoning_chain=result.reasoning_chain,
-            snomed_mappings=result.snomed_mappings,
-            mapping_confidence=result.mapping_confidence,
-            inference_id=result.inference_id,
-            persisted=result.persisted,
-            mdt_summary=result.mdt_summary,
-            key_considerations=result.key_considerations,
-            discussion_points=result.discussion_points,
-            processing_time_seconds=result.processing_time_seconds,
-            errors=result.errors,
-            guideline_refs=result.guideline_refs
+            patient_id=result.get("patient_id", "unknown"),
+            success=result.get("status") == "success",
+            workflow_status=result.get("status", "unknown"),
+            agent_chain=result.get("agent_chain", []),
+            scenario=result.get("complexity", "unknown"),
+            scenario_confidence=result.get("mapping_confidence", 0.0),
+            recommendations=result.get("recommendations", []),
+            reasoning_chain=[],  # Integrated workflow uses different format
+            snomed_mappings={},  # Embedded in patient_with_codes
+            mapping_confidence=result.get("mapping_confidence", 0.0),
+            inference_id=result.get("persistence", {}).get("inference_id"),
+            persisted=persist_to_neo4j and "persistence" in result and not result.get("persistence", {}).get("error"),
+            mdt_summary=result.get("mdt_summary", ""),
+            key_considerations=[],
+            discussion_points=[],
+            processing_time_seconds=result.get("processing_time_ms", 0) / 1000.0,
+            errors=result.get("errors", []),
+            guideline_refs=[]
         )
 
     except Exception as e:

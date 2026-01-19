@@ -353,15 +353,15 @@ class SurvivalAnalyzer:
             risk_score += 1
             risk_factors.append(f"Age 60-70 ({age})")
 
-        # Stage
+        # Stage (using ClinicalMappings)
         stage = patient.get('tnm_stage', 'IV')
-        if stage in ['IV', 'IVA', 'IVB']:
+        if ClinicalMappings.is_metastatic(stage):
             risk_score += 3
             risk_factors.append(f"Stage IV disease")
         elif stage in ['IIIB', 'IIIC']:
             risk_score += 2
             risk_factors.append(f"Stage IIIB/IIIC disease")
-        elif stage in ['IIIA']:
+        elif stage == 'IIIA':
             risk_score += 1
             risk_factors.append(f"Stage IIIA disease")
 

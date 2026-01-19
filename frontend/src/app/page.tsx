@@ -2,8 +2,8 @@ import Link from "next/link";
 
 const features = [
   {
-    title: "6-Agent Orchestration",
-    body: "Ingestion, SNOMED mapping, OWL reasoning, conflict resolution, persistence, and MDT explanation operate in a deterministic LangGraph flow with Neo4j as a tool." 
+    title: "11-Agent Integrated Workflow",
+    body: "Core Processing (4), Specialized Clinical (5), and Orchestration (2) agents work in harmony: from data ingestion through SNOMED/LUCADA mapping, cancer-specific analysis (NSCLC/SCLC), biomarker interpretation, to explanation and persistence." 
   },
   {
     title: "Neo4j Auditability",

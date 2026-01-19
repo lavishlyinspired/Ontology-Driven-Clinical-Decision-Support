@@ -161,7 +161,7 @@ export default function PatientForm() {
           cursor: isPending ? "progress" : "pointer"
         }}
       >
-        {isPending ? "Analyzing…" : "Run 6-Agent Workflow"}
+        {isPending ? "Analyzing…" : "Run 11-Agent Analysis"}
       </button>
       {error && <p className="muted" style={{ marginTop: "0.75rem" }}>{error}</p>}
       {analysis && (

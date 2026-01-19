@@ -22,14 +22,13 @@ from .dynamic_orchestrator import (
 )
 from .ingestion_agent import IngestionAgent
 from .semantic_mapping_agent import SemanticMappingAgent
-from .classification_agent import ClassificationAgent
 from .biomarker_agent import BiomarkerAgent
 from .nsclc_agent import NSCLCAgent
 from .sclc_agent import SCLCAgent
 from .comorbidity_agent import ComorbidityAgent
 from .negotiation_protocol import NegotiationProtocol, NegotiationStrategy, AgentProposal
-from .conflict_resolution_agent import ConflictResolutionAgent
 from .explanation_agent import ExplanationAgent
+from .persistence_agent import PersistenceAgent
 
 try:
     from ..analytics.uncertainty_quantifier import UncertaintyQuantifier
@@ -76,8 +75,6 @@ class IntegratedLCAWorkflow:
         # Core agents
         self.ingestion = IngestionAgent()
         self.semantic_mapping = SemanticMappingAgent()
-        self.classification = ClassificationAgent()
-        self.conflict_resolution = ConflictResolutionAgent()
         self.explanation = ExplanationAgent()
 
         # Specialized agents (2025)
@@ -85,6 +82,7 @@ class IntegratedLCAWorkflow:
         self.nsclc = NSCLCAgent()
         self.sclc = SCLCAgent()
         self.comorbidity = ComorbidityAgent() if neo4j_tools else None
+        self.persistence = PersistenceAgent(neo4j_tools) if neo4j_tools else None
 
         # Negotiation protocol (2025)
         self.negotiation = NegotiationProtocol(
@@ -115,13 +113,15 @@ class IntegratedLCAWorkflow:
         Comprehensive patient analysis with all enhancements
 
         Workflow:
-        1. Assess complexity
-        2. Ingestion and semantic mapping
-        3. Parallel specialized agent execution
-        4. Multi-agent negotiation (if enabled)
-        5. Advanced analytics (if enabled)
-        6. Generate explanation with uncertainty metrics
-        7. Optionally persist to Neo4j
+        1. Assess complexity and route workflow
+        2. Patient data ingestion and validation
+        3. Semantic mapping to standardized codes
+        4. Parallel execution of specialized agents (NSCLC/SCLC/Biomarker)
+        5. Multi-agent negotiation (if multiple proposals)
+        6. Advanced analytics (survival, uncertainty, trials)
+        7. Generate clinical explanation and MDT summary
+        8. Persist results to Neo4j (if requested)
+        9. Compile and return final results
 
         Args:
             patient_data: Patient clinical data
@@ -256,7 +256,29 @@ class IntegratedLCAWorkflow:
             workflow_results["agent_chain"].append("ExplanationAgent")
             workflow_results["mdt_summary"] = mdt_summary
 
-            # Step 9: Compile final results
+            # Step 9: Persist to Neo4j (if requested and available)
+            persistence_result = None
+            if persist and self.persistence:
+                try:
+                    persistence_result = self.persistence.execute(
+                        patient=patient_with_codes,
+                        classification=final_recommendation,
+                        agent_chain=workflow_results["agent_chain"]
+                    )
+                    workflow_results["agent_chain"].append("PersistenceAgent")
+                    workflow_results["persistence"] = {
+                        "inference_id": persistence_result.inference_id if persistence_result else None,
+                        "write_receipt": persistence_result.write_receipt if persistence_result else None
+                    }
+                    logger.info(f"✅ Results persisted to Neo4j with inference_id: {persistence_result.inference_id if persistence_result else None}")
+                except Exception as e:
+                    logger.warning(f"⚠ Persistence failed: {e}")
+                    workflow_results["persistence"] = {"error": str(e)}
+            elif persist and not self.persistence:
+                logger.warning("⚠ Persistence requested but Neo4j not available")
+                workflow_results["persistence"] = {"error": "Neo4j not available"}
+
+            # Step 10: Compile final results
             end_time = datetime.now()
             workflow_results.update({
                 "status": "success",
@@ -269,7 +291,7 @@ class IntegratedLCAWorkflow:
                 "processing_time_ms": int((end_time - start_time).total_seconds() * 1000)
             })
 
-            # Step 10: Context graph (from orchestrator)
+            # Step 11: Context graph (from orchestrator)
             workflow_results["context_graph"] = self.orchestrator.context_graph.to_dict()
 
             return workflow_results

@@ -146,7 +146,7 @@ class ClinicalTrialMatcher:
 
         # 2. Stage match (25% weight)
         stage = patient.get('tnm_stage', '')
-        stage_keywords = self._get_stage_keywords(stage)
+        stage_keywords = ClinicalMappings.get_stage_keywords(stage)
         if any(kw.lower() in trial.eligibility_criteria.lower() for kw in stage_keywords):
             matched_criteria.append(f"Stage: {stage}")
             score += 0.25
@@ -330,11 +330,11 @@ class ClinicalTrialMatcher:
         elif 'SmallCell' in histology:
             search_terms.append("SCLC")
 
-        # Stage
+        # Stage (using ClinicalMappings)
         stage = patient.get('tnm_stage', '')
-        if stage in ['IV', 'IVA', 'IVB']:
+        if ClinicalMappings.is_metastatic(stage):
             search_terms.append("metastatic")
-        elif stage in ['IIIA', 'IIIB', 'IIIC']:
+        elif ClinicalMappings.is_locally_advanced(stage):
             search_terms.append("locally advanced")
 
         # Biomarkers
@@ -350,18 +350,8 @@ class ClinicalTrialMatcher:
         }
 
     def _get_stage_keywords(self, stage: str) -> List[str]:
-        """Get keywords associated with stage"""
-
-        stage_map = {
-            'I': ['early stage', 'stage I', 'stage 1'],
-            'II': ['early stage', 'stage II', 'stage 2'],
-            'III': ['locally advanced', 'stage III', 'stage 3'],
-            'IV': ['metastatic', 'advanced', 'stage IV', 'stage 4']
-        }
-
-        # Get base stage (I, II, III, IV)
-        base_stage = stage[0] if stage else 'IV'
-        return stage_map.get(base_stage, ['advanced'])
+        """Get keywords associated with stage - delegates to ClinicalMappings"""
+        return ClinicalMappings.get_stage_keywords(stage)
 
     # ========================================
     # EXAMPLE DATA

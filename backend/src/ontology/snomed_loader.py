@@ -603,6 +603,64 @@ class SNOMEDLoader:
         }
         return laterality_map.get(laterality)
 
+    # Public methods for semantic mapping (used by SemanticMappingAgent)
+    @classmethod
+    def map_histology(cls, histology: str) -> Optional[str]:
+        """Map histology type to SNOMED-CT code."""
+        return cls.HISTOLOGY_MAP.get(histology)
+
+    @classmethod
+    def map_stage(cls, stage: str) -> Optional[str]:
+        """Map TNM stage to SNOMED-CT code."""
+        return cls.STAGE_MAP.get(stage)
+
+    @classmethod
+    def map_performance_status(cls, ps: int) -> Optional[str]:
+        """Map WHO performance status to SNOMED-CT code."""
+        return cls.PERFORMANCE_STATUS_MAP.get(ps)
+
+    @classmethod
+    def map_laterality(cls, laterality: str) -> Optional[str]:
+        """Map laterality to SNOMED-CT code."""
+        laterality_map = {
+            "Right": "39607008",
+            "Left": "44029006",
+            "Bilateral": "51185008",
+        }
+        return laterality_map.get(laterality)
+
+    @classmethod
+    def map_treatment(cls, treatment: str) -> Optional[str]:
+        """Map treatment type to SNOMED-CT code."""
+        return cls.TREATMENT_MAP.get(treatment)
+
+    @classmethod
+    def is_nsclc_subtype(cls, histology_code: str) -> bool:
+        """Check if a SNOMED code represents an NSCLC subtype."""
+        nsclc_subtypes = [
+            "35917007",   # Adenocarcinoma
+            "59367005",   # Squamous cell
+            "67101007",   # Large cell
+            "128885008",  # Carcinosarcoma
+            "254637007",  # NSCLC NOS
+        ]
+        return histology_code in nsclc_subtypes
+
+    @classmethod
+    def is_sclc(cls, histology_code: str) -> bool:
+        """Check if a SNOMED code represents SCLC."""
+        return histology_code == "254632001"
+
+    @classmethod
+    def get_diagnosis_code(cls, diagnosis: str) -> Optional[str]:
+        """Map diagnosis to SNOMED-CT code with fallback to generic lung cancer."""
+        diagnosis_map = {
+            "Malignant Neoplasm of Lung": "363358000",
+            "NSCLC": "254637007",
+            "SCLC": "254632001",
+        }
+        return diagnosis_map.get(diagnosis, "363358000")  # Default to malignant neoplasm of lung
+
     def generate_owl_expression(self, patient_data: Dict[str, Any]) -> str:
         """
         Generate OWL 2 class expression for patient classification.

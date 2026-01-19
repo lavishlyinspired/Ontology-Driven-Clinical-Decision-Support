@@ -114,7 +114,7 @@ class SemanticMappingAgent:
 
     def map_to_snomed(self, concept_type: str, value: Any) -> Tuple[Optional[str], float]:
         """
-        Map a clinical concept to its SNOMED-CT code.
+        Map a clinical concept to its SNOMED-CT code using SNOMEDLoader.
         
         Args:
             concept_type: Type of concept (histology, stage, etc.)
@@ -128,34 +128,31 @@ class SemanticMappingAgent:
 
         try:
             if concept_type == "histology":
-                code = self.HISTOLOGY_SNOMED.get(str(value))
+                code = SNOMEDLoader.map_histology(str(value))
                 confidence = 1.0 if code else 0.5
                 return code, confidence
 
             elif concept_type == "stage":
-                code = self.STAGE_SNOMED.get(str(value))
+                code = SNOMEDLoader.map_stage(str(value))
                 confidence = 1.0 if code else 0.5
                 return code, confidence
 
             elif concept_type == "performance_status":
                 ps_value = int(value) if not isinstance(value, int) else value
-                code = self.PERFORMANCE_STATUS_SNOMED.get(ps_value)
+                code = SNOMEDLoader.map_performance_status(ps_value)
                 confidence = 1.0 if code else 0.5
                 return code, confidence
 
             elif concept_type == "laterality":
-                code = self.LATERALITY_SNOMED.get(str(value))
+                code = SNOMEDLoader.map_laterality(str(value))
                 confidence = 1.0 if code else 0.5
                 return code, confidence
 
             elif concept_type == "diagnosis":
-                # Try exact match first
-                code = self.DIAGNOSIS_SNOMED.get(str(value))
-                if code:
-                    return code, 1.0
-                
-                # Default to generic lung cancer
-                return "363358000", 0.8
+                code = SNOMEDLoader.get_diagnosis_code(str(value))
+                # get_diagnosis_code has fallback, so confidence is high
+                confidence = 1.0 if code != "363358000" else 0.8
+                return code, confidence
 
             else:
                 return None, 0.0
@@ -168,29 +165,34 @@ class SemanticMappingAgent:
         """
         Get ancestor concepts in SNOMED hierarchy.
         Useful for subsumption reasoning.
+        
+        Note: This is a simplified hierarchy. Full OWL ontology loading
+        via SNOMEDLoader.load() would provide complete hierarchical reasoning.
         """
         # Simplified hierarchy for lung cancer concepts
+        # Maps: child_code -> [parent_codes]
         hierarchy_map = {
-            # Histology hierarchy
-            "35917007": ["254637007", "363358000"],  # Adenocarcinoma → NSCLC → Lung cancer
-            "59367005": ["254637007", "363358000"],  # Squamous → NSCLC → Lung cancer
-            "67101007": ["254637007", "363358000"],  # Large cell → NSCLC → Lung cancer
-            "128885008": ["254637007", "363358000"],  # Carcinosarcoma → NSCLC → Lung cancer
-            "254632001": ["363358000"],  # SCLC → Lung cancer
-            "254637007": ["363358000"],  # NSCLC → Lung cancer
+            # Histology hierarchy (all subtypes → parent types)
+            SNOMEDLoader.HISTOLOGY_MAP.get("Adenocarcinoma"): ["254637007", "363358000"],  # Adeno → NSCLC → Lung cancer
+            SNOMEDLoader.HISTOLOGY_MAP.get("SquamousCellCarcinoma"): ["254637007", "363358000"],  # Squamous → NSCLC → Lung cancer
+            SNOMEDLoader.HISTOLOGY_MAP.get("LargeCellCarcinoma"): ["254637007", "363358000"],  # Large cell → NSCLC → Lung cancer
+            SNOMEDLoader.HISTOLOGY_MAP.get("Carcinosarcoma"): ["254637007", "363358000"],  # Carcinosarcoma → NSCLC → Lung cancer
+            SNOMEDLoader.HISTOLOGY_MAP.get("SmallCellCarcinoma"): ["363358000"],  # SCLC → Lung cancer
+            SNOMEDLoader.HISTOLOGY_MAP.get("NonSmallCellCarcinoma"): ["363358000"],  # NSCLC → Lung cancer
         }
         return hierarchy_map.get(sctid, [])
 
     def validate_mapping(self, sctid: str, expected_type: str) -> bool:
         """
         Validate that a SNOMED code matches expected semantic type.
+        Uses SNOMEDLoader mappings for validation.
         """
         type_codes = {
-            "histology": list(self.HISTOLOGY_SNOMED.values()),
-            "stage": list(self.STAGE_SNOMED.values()),
-            "performance_status": list(self.PERFORMANCE_STATUS_SNOMED.values()),
-            "laterality": list(self.LATERALITY_SNOMED.values()),
-            "diagnosis": list(self.DIAGNOSIS_SNOMED.values()),
+            "histology": list(SNOMEDLoader.HISTOLOGY_MAP.values()),
+            "stage": list(SNOMEDLoader.STAGE_MAP.values()),
+            "performance_status": list(SNOMEDLoader.PERFORMANCE_STATUS_MAP.values()),
+            "laterality": ["39607008", "44029006", "51185008"],  # Right, Left, Bilateral
+            "diagnosis": ["363358000", "254637007", "254632001"],  # Lung cancer, NSCLC, SCLC
         }
         
         expected_codes = type_codes.get(expected_type, [])
@@ -200,16 +202,13 @@ class SemanticMappingAgent:
         """
         Check if a histology code represents an NSCLC subtype.
         Important for guideline rule matching.
+        Delegates to SNOMEDLoader for consistency.
         """
-        nsclc_subtypes = [
-            "35917007",   # Adenocarcinoma
-            "59367005",   # Squamous cell
-            "67101007",   # Large cell
-            "128885008",  # Carcinosarcoma
-            "254637007",  # NSCLC NOS
-        ]
-        return histology_code in nsclc_subtypes
+        return SNOMEDLoader.is_nsclc_subtype(histology_code)
 
     def is_sclc(self, histology_code: str) -> bool:
-        """Check if a histology code represents SCLC."""
-        return histology_code == "254632001"
+        """
+        Check if a histology code represents SCLC.
+        Delegates to SNOMEDLoader for consistency.
+        """
+        return SNOMEDLoader.is_sclc(histology_code)

@@ -12,7 +12,8 @@ docs/
 .env
 .env.local
 *.owl
-
-
+.env.local
+.next
+node_modules
 notes.txt
 

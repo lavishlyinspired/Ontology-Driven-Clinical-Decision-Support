@@ -7,7 +7,7 @@ Available Commands:
 - check: Verify all prerequisites and services
 - start-api: Launch FastAPI REST server
 - start-mcp: Launch MCP server for Claude Desktop integration
-- run-workflow: Execute 6-agent clinical decision support workflow
+- run-workflow: Execute 11-agent integrated clinical decision support workflow
 - generate-samples: Create sample patient data files
 - test: Run comprehensive system tests
 """
@@ -228,8 +228,8 @@ def run_workflow(
     persist: bool = typer.Option(False, help="Save results to Neo4j"),
     verbose: bool = typer.Option(False, help="Show detailed output"),
 ):
-    """Run the 6-agent clinical decision support workflow."""
-    console.print("\n[bold cyan]═══ LCA 6-AGENT WORKFLOW ═══[/bold cyan]\n")
+    """Run the 11-agent integrated clinical decision support workflow."""
+    console.print("\n[bold cyan]═══ LCA 11-AGENT INTEGRATED WORKFLOW ═══[/bold cyan]\n")
     
     # Load patient data
     if patient_file:
@@ -259,7 +259,7 @@ def run_workflow(
         console.print("[yellow]→[/yellow] Initializing workflow...")
         workflow = LCAWorkflow(persist_results=persist)
         
-        console.print("[yellow]→[/yellow] Running 6-agent pipeline...\n")
+        console.print("[yellow]→[/yellow] Running 11-agent integrated pipeline...\n")
         start_time = time.time()
         
         result = workflow.run(patient_data)
@@ -393,13 +393,21 @@ def list_patients():
 def info():
     """Display project information and architecture overview."""
     console.print("\n[bold cyan]═══ LUNG CANCER ASSISTANT (LCA) ═══[/bold cyan]\n")
-    console.print("[bold]6-Agent Architecture:[/bold]")
-    console.print("  1. [cyan]IngestionAgent[/cyan]        → Validates raw patient data")
-    console.print("  2. [cyan]SemanticMappingAgent[/cyan]  → Maps to SNOMED-CT codes")
-    console.print("  3. [cyan]ClassificationAgent[/cyan]   → Applies LUCADA ontology + NICE guidelines")
-    console.print("  4. [cyan]ConflictResolutionAgent[/cyan] → Resolves conflicting recommendations")
-    console.print("  5. [cyan]PersistenceAgent[/cyan]      → Saves to Neo4j (ONLY writer)")
-    console.print("  6. [cyan]ExplanationAgent[/cyan]      → Generates MDT summaries\n")
+    console.print("[bold]11-Agent Integrated Architecture (2025-2026):[/bold]")
+    console.print("  [yellow]Core Processing (4):[/yellow]")
+    console.print("    • [cyan]IngestionAgent[/cyan] → Validates raw patient data")
+    console.print("    • [cyan]SemanticMappingAgent[/cyan] → Maps to SNOMED-CT/LUCADA codes")
+    console.print("    • [cyan]ExplanationAgent[/cyan] → Generates MDT summaries")
+    console.print("    • [cyan]PersistenceAgent[/cyan] → Saves to Neo4j (ONLY writer)\n")
+    console.print("  [yellow]Specialized Clinical (5):[/yellow]")
+    console.print("    • [cyan]NSCLCAgent[/cyan] → Non-small cell lung cancer treatment")
+    console.print("    • [cyan]SCLCAgent[/cyan] → Small cell lung cancer protocols")
+    console.print("    • [cyan]BiomarkerAgent[/cyan] → Precision medicine analysis")
+    console.print("    • [cyan]ComorbidityAgent[/cyan] → Comorbidity impact assessment")
+    console.print("    • [cyan]NegotiationAgent[/cyan] → Multi-agent consensus\n")
+    console.print("  [yellow]Orchestration (2):[/yellow]")
+    console.print("    • [cyan]DynamicOrchestrator[/cyan] → Intelligent agent routing")
+    console.print("    • [cyan]IntegratedWorkflow[/cyan] → End-to-end coordination\n")
     
     console.print("[bold]Technology Stack:[/bold]")
     console.print("  • [yellow]OWL Ontology[/yellow]: LUCADA + SNOMED-CT")

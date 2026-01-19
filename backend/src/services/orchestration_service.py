@@ -1,6 +1,6 @@
 """
 Orchestration Service for Lung Cancer Assistant
-Provides high-level API for the 6-agent workflow system.
+Provides high-level API for the 11-agent integrated workflow system.
 
 Per PHASE 6 of final.md specification.
 """
@@ -40,7 +40,7 @@ class LungCancerAssistantService:
     Main orchestration service for the Lung Cancer Assistant.
     
     Provides high-level methods for:
-    - Processing patients through the 6-agent workflow
+    - Processing patients through the 11-agent integrated workflow
     - Retrieving patient history and inferences
     - Validating new guideline rules
     - Managing system configuration
@@ -110,7 +110,7 @@ class LungCancerAssistantService:
         persist: bool = True
     ) -> DecisionSupportResponse:
         """
-        Process a patient through the complete 6-agent workflow.
+        Process a patient through the complete 11-agent integrated workflow.
         
         This is the main entry point for clinical decision support.
         
@@ -319,15 +319,25 @@ class LungCancerAssistantService:
                 "write_tools": self.write_tools is not None
             },
             "workflow": {
-                "agents": [
+                "core_processing": [
                     "IngestionAgent",
-                    "SemanticMappingAgent", 
-                    "ClassificationAgent",
-                    "ConflictResolutionAgent",
-                    "PersistenceAgent",
-                    "ExplanationAgent"
+                    "SemanticMappingAgent",
+                    "ExplanationAgent",
+                    "PersistenceAgent"
                 ],
-                "architecture": "6-Agent LangGraph Workflow"
+                "specialized_clinical": [
+                    "NSCLCAgent",
+                    "SCLCAgent",
+                    "BiomarkerAgent",
+                    "ComorbidityAgent",
+                    "NegotiationAgent"
+                ],
+                "orchestration": [
+                    "DynamicOrchestrator",
+                    "IntegratedWorkflow"
+                ],
+                "total_agents": 11,
+                "architecture": "11-Agent Integrated Workflow (2025-2026)"
             }
         }
 

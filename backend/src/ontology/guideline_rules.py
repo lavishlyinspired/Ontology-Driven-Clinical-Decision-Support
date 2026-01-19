@@ -348,7 +348,9 @@ class GuidelineRuleEngine:
                 else:
                     # Fallback to generic treatment plan
                     treatment_ref = self.onto.TreatmentPlan(f"Reference_{rule.recommended_treatment}_Plan")
-                    treatment_ref.treatment_plan_type = rule.recommended_treatment
+                    # Use append() for non-functional properties
+                    if hasattr(treatment_ref, 'treatment_plan_type'):
+                        treatment_ref.treatment_plan_type.append(rule.recommended_treatment)
 
                 # Set intent
                 if rule.treatment_intent == "Curative":
