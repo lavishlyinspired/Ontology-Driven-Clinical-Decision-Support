@@ -17,6 +17,7 @@ from .biomarker_detail import router as biomarker_detail_router
 from .counterfactual import router as counterfactual_router
 from .export import router as export_router
 from .system import router as system_router
+from .digital_twin_api import router as digital_twin_router
 
 __all__ = [
     "patients_router",
@@ -32,6 +33,7 @@ __all__ = [
     "biomarker_detail_router",
     "counterfactual_router",
     "export_router",
-    "system_router"
+    "system_router",
+    "digital_twin_router"
 ]
 
