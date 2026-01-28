@@ -330,39 +330,65 @@ class DynamicWorkflowOrchestrator:
         ]
 
         if complexity == WorkflowComplexity.SIMPLE:
-            # Fast path: skip some optional agents
-            return base_agents
-
-        elif complexity == WorkflowComplexity.MODERATE:
-            # Standard path: include biomarker analysis
-            return base_agents[:3] + ["BiomarkerAgent"] + base_agents[3:]
-
-        elif complexity == WorkflowComplexity.COMPLEX:
-            # Extended path: add comorbidity and uncertainty
+            # Fast path: core agents + biomarker + comorbidity
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
                 "ClassificationAgent",
                 "BiomarkerAgent",
                 "ComorbidityAgent",
+                "NSCLCAgent",
+                "ConflictResolutionAgent",
+                "ExplanationAgent"
+            ]
+
+        elif complexity == WorkflowComplexity.MODERATE:
+            # Standard path: include uncertainty quantification
+            return [
+                "IngestionAgent",
+                "SemanticMappingAgent",
+                "ClassificationAgent",
+                "BiomarkerAgent",
+                "ComorbidityAgent",
+                "NSCLCAgent",
                 "ConflictResolutionAgent",
                 "UncertaintyQuantifier",
                 "ExplanationAgent"
             ]
 
-        else:  # CRITICAL
-            # Comprehensive path: all agents + clinical trials
+        elif complexity == WorkflowComplexity.COMPLEX:
+            # Extended path: add analytics agents
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
                 "ClassificationAgent",
                 "BiomarkerAgent",
                 "ComorbidityAgent",
+                "NSCLCAgent",
+                "SCLCAgent",
+                "SurvivalAnalyzer",
+                "ConflictResolutionAgent",
+                "UncertaintyQuantifier",
+                "ClinicalTrialMatcher",
+                "ExplanationAgent"
+            ]
+
+        else:  # CRITICAL
+            # Comprehensive path: ALL agents including counterfactual and persistence
+            return [
+                "IngestionAgent",
+                "SemanticMappingAgent",
+                "ClassificationAgent",
+                "BiomarkerAgent",
+                "ComorbidityAgent",
+                "NSCLCAgent",
+                "SCLCAgent",
                 "SurvivalAnalyzer",
                 "ClinicalTrialMatcher",
                 "ConflictResolutionAgent",
                 "UncertaintyQuantifier",
                 "CounterfactualEngine",
+                "PersistenceAgent",
                 "ExplanationAgent"
             ]
 

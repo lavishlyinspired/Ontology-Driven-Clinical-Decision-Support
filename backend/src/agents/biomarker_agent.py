@@ -51,6 +51,12 @@ class BiomarkerAgent:
         self.agent_type = "BiomarkerAgent"
         self.guidelines_version = "2025"
 
+    def _get_patient_attr(self, patient, attr: str, default=None):
+        """Helper to safely get patient attributes from dict or object"""
+        if isinstance(patient, dict):
+            return patient.get(attr, default)
+        return getattr(patient, attr, default)
+
     def execute(
         self,
         patient: PatientFactWithCodes,
@@ -61,14 +67,33 @@ class BiomarkerAgent:
 
         Args:
             patient: Patient with clinical data and codes
-            biomarker_profile: Molecular biomarker results
+            biomarker_profile: Molecular biomarker results (BiomarkerProfile or dict)
 
         Returns:
             AgentProposal with biomarker-guided treatment
         """
-        logger.info(f"Biomarker Agent analyzing patient {patient.patient_id}")
+        # Handle patient as dict or object
+        patient_id = patient.patient_id if hasattr(patient, 'patient_id') else patient.get('patient_id', 'Unknown')
+        logger.info(f"Biomarker Agent analyzing patient {patient_id}")
 
-        # Extract biomarker data
+        # Convert dict biomarker_profile to BiomarkerProfile object
+        if biomarker_profile is not None and isinstance(biomarker_profile, dict):
+            biomarker_profile = BiomarkerProfile(
+                egfr_mutation=biomarker_profile.get('egfr_mutation'),
+                egfr_mutation_type=biomarker_profile.get('egfr_mutation_type'),
+                alk_rearrangement=biomarker_profile.get('alk_rearrangement'),
+                ros1_rearrangement=biomarker_profile.get('ros1_rearrangement'),
+                braf_mutation=biomarker_profile.get('braf_mutation'),
+                met_exon14_skipping=biomarker_profile.get('met_exon14_skipping') or biomarker_profile.get('met_exon14'),
+                ret_rearrangement=biomarker_profile.get('ret_rearrangement'),
+                kras_mutation=biomarker_profile.get('kras_mutation'),
+                pdl1_tps=biomarker_profile.get('pdl1_tps'),
+                tmb_score=biomarker_profile.get('tmb_score'),
+                her2_mutation=biomarker_profile.get('her2_mutation'),
+                ntrk_fusion=biomarker_profile.get('ntrk_fusion')
+            )
+
+        # Extract biomarker data if not provided
         if biomarker_profile is None:
             biomarker_profile = self._extract_biomarkers(patient)
 
@@ -157,9 +182,12 @@ class BiomarkerAgent:
         contraindications = []
 
         # Check for ILD risk factors
-        if "interstitial_lung_disease" in patient.comorbidities:
+        comorbidities = self._get_patient_attr(patient, 'comorbidities', [])
+        if "interstitial_lung_disease" in comorbidities:
             contraindications.append("Pre-existing ILD - EGFR TKI use with caution")
             risk_score = 0.5
+        
+        tnm_stage = self._get_patient_attr(patient, 'tnm_stage', 'IV')
 
         return AgentProposal(
             agent_id=self.agent_id,
@@ -167,7 +195,7 @@ class BiomarkerAgent:
             treatment=treatment,
             confidence=0.95,  # High confidence for actionable mutation
             evidence_level="Grade A",
-            treatment_intent="Curative" if patient.tnm_stage in ["I", "II", "III", "IIIA"] else "Palliative",
+            treatment_intent="Curative" if tnm_stage in ["I", "II", "III", "IIIA"] else "Palliative",
             rationale=rationale,
             guideline_reference="NCCN NSCLC 2025, ASCO EGFR Guidelines",
             contraindications=contraindications,
@@ -199,9 +227,12 @@ class BiomarkerAgent:
         risk_score = 0.2
 
         # Check hepatic function
-        if "hepatic_impairment" in patient.comorbidities:
+        comorbidities = self._get_patient_attr(patient, 'comorbidities', [])
+        if "hepatic_impairment" in comorbidities:
             contraindications.append("Hepatic impairment - monitor liver function closely")
             risk_score = 0.4
+        
+        tnm_stage = self._get_patient_attr(patient, 'tnm_stage', 'IV')
 
         return AgentProposal(
             agent_id=self.agent_id,
@@ -209,7 +240,7 @@ class BiomarkerAgent:
             treatment=treatment,
             confidence=0.95,
             evidence_level="Grade A",
-            treatment_intent="Curative" if patient.tnm_stage in ["I", "II", "III"] else "Palliative",
+            treatment_intent="Curative" if tnm_stage in ["I", "II", "III"] else "Palliative",
             rationale=rationale,
             guideline_reference="NCCN NSCLC 2025, ESMO ALK+ Guidelines",
             contraindications=contraindications,
@@ -236,6 +267,8 @@ class BiomarkerAgent:
             "ROS1 rearrangement detected. Entrectinib recommended with CNS activity "
             "(ORR 77%, intracranial ORR 55%)."
         )
+        
+        tnm_stage = self._get_patient_attr(patient, 'tnm_stage', 'IV')
 
         return AgentProposal(
             agent_id=self.agent_id,
@@ -243,7 +276,7 @@ class BiomarkerAgent:
             treatment=treatment,
             confidence=0.93,
             evidence_level="Grade A",
-            treatment_intent="Curative" if patient.tnm_stage in ["I", "II", "III"] else "Palliative",
+            treatment_intent="Curative" if tnm_stage in ["I", "II", "III"] else "Palliative",
             rationale=rationale,
             guideline_reference="NCCN NSCLC 2025, FDA ROS1 Guidelines",
             contraindications=[],
@@ -406,7 +439,8 @@ class BiomarkerAgent:
         risk_score = 0.3
 
         # Check for autoimmune conditions
-        if any(c in patient.comorbidities for c in ["autoimmune_disease", "inflammatory_bowel_disease"]):
+        comorbidities = self._get_patient_attr(patient, 'comorbidities', [])
+        if any(c in comorbidities for c in ["autoimmune_disease", "inflammatory_bowel_disease"]):
             contraindications.append("Autoimmune condition - increased risk of immune-related AEs")
             risk_score = 0.6
 
@@ -438,17 +472,18 @@ class BiomarkerAgent:
         """Moderate PD-L1 expression (1-49%) pathway"""
 
         # Check performance status for chemotherapy eligibility
-        if patient.performance_status <= 1:
+        ps = self._get_patient_attr(patient, 'performance_status', 2)
+        if ps <= 1:
             treatment = "Pembrolizumab + Platinum doublet chemotherapy"
             rationale = (
-                f"PD-L1 TPS 1-49% ({biomarkers.pdl1_tps}%), PS {patient.performance_status}. "
+                f"PD-L1 TPS 1-49% ({biomarkers.pdl1_tps}%), PS {ps}. "
                 "Chemo-immunotherapy per KEYNOTE-189 (median OS 22.0 vs 10.7 months)."
             )
             confidence = 0.88
         else:
             treatment = "Carboplatin-based chemotherapy (consider immunotherapy if PS improves)"
             rationale = (
-                f"PD-L1 TPS 1-49% ({biomarkers.pdl1_tps}%), PS {patient.performance_status}. "
+                f"PD-L1 TPS 1-49% ({biomarkers.pdl1_tps}%), PS {ps}. "
                 "Chemotherapy preferred due to performance status. Reassess for immunotherapy if PS improves."
             )
             confidence = 0.75
@@ -478,7 +513,8 @@ class BiomarkerAgent:
     ) -> AgentProposal:
         """No actionable biomarkers - recommend standard therapy"""
 
-        if patient.performance_status <= 1:
+        ps = self._get_patient_attr(patient, 'performance_status', 2)
+        if ps <= 1:
             treatment = "Platinum-based chemotherapy doublet"
             rationale = (
                 "No actionable molecular alterations detected. "
@@ -489,7 +525,7 @@ class BiomarkerAgent:
         else:
             treatment = "Single-agent chemotherapy or best supportive care"
             rationale = (
-                f"No actionable biomarkers, PS {patient.performance_status}. "
+                f"No actionable biomarkers, PS {ps}. "
                 "Single-agent therapy or best supportive care recommended."
             )
             confidence = 0.65
@@ -517,6 +553,23 @@ class BiomarkerAgent:
 
     def _extract_biomarkers(self, patient: PatientFactWithCodes) -> BiomarkerProfile:
         """Extract biomarker data from patient record"""
+        
+        # Handle dict input
+        if isinstance(patient, dict):
+            return BiomarkerProfile(
+                egfr_mutation=patient.get('egfr_mutation_status') or patient.get('egfr_mutation'),
+                egfr_mutation_type=patient.get('egfr_mutation_type'),
+                alk_rearrangement=patient.get('alk_rearrangement'),
+                ros1_rearrangement=patient.get('ros1_rearrangement'),
+                braf_mutation=patient.get('braf_mutation'),
+                met_exon14_skipping=patient.get('met_exon14') or patient.get('met_exon14_skipping'),
+                ret_rearrangement=patient.get('ret_rearrangement'),
+                kras_mutation=patient.get('kras_mutation'),
+                pdl1_tps=patient.get('pdl1_score') or patient.get('pdl1_tps'),
+                tmb_score=patient.get('tmb_score'),
+                her2_mutation=patient.get('her2_mutation'),
+                ntrk_fusion=patient.get('ntrk_fusion')
+            )
 
         return BiomarkerProfile(
             egfr_mutation=patient.egfr_mutation_status if hasattr(patient, 'egfr_mutation_status') else None,
@@ -544,9 +597,12 @@ class BiomarkerAgent:
             List of recommended tests
         """
         recommended_tests = []
+        
+        histology_type = self._get_patient_attr(patient, 'histology_type', '')
+        tnm_stage = self._get_patient_attr(patient, 'tnm_stage', 'IV')
 
         # For NSCLC, comprehensive panel is standard
-        if "NonSmallCell" in patient.histology_type or "Adenocarcinoma" in patient.histology_type:
+        if "NonSmallCell" in histology_type or "Adenocarcinoma" in histology_type:
             recommended_tests.extend([
                 "EGFR mutation analysis (exons 18-21)",
                 "ALK rearrangement (IHC or FISH)",
@@ -557,7 +613,7 @@ class BiomarkerAgent:
             ])
 
             # Add additional markers for advanced disease
-            if patient.tnm_stage in ["IV", "IVA", "IVB"]:
+            if tnm_stage in ["IV", "IVA", "IVB"]:
                 recommended_tests.extend([
                     "MET exon 14 skipping",
                     "RET rearrangement",
@@ -568,7 +624,7 @@ class BiomarkerAgent:
                 ])
 
         # For squamous histology
-        elif "Squamous" in patient.histology_type:
+        elif "Squamous" in histology_type:
             recommended_tests.extend([
                 "PD-L1 expression",
                 "Consider comprehensive genomic profiling"

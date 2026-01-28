@@ -18,6 +18,7 @@ from .counterfactual import router as counterfactual_router
 from .export import router as export_router
 from .system import router as system_router
 from .digital_twin_api import router as digital_twin_router
+from .chat import router as chat_router
 
 __all__ = [
     "patients_router",
@@ -34,6 +35,7 @@ __all__ = [
     "counterfactual_router",
     "export_router",
     "system_router",
-    "digital_twin_router"
+    "digital_twin_router",
+    "chat_router"
 ]
 

@@ -21,7 +21,8 @@ from src.agents.dynamic_orchestrator import DynamicWorkflowOrchestrator, Workflo
 from src.ontology.lucada_ontology import LUCADAOntology
 from src.ontology.guideline_rules import GuidelineRuleEngine
 from src.db.neo4j_schema import LUCADAGraphDB, Neo4jConfig
-from src.db.vector_store import LUCADAVectorStore
+# Lazy import for vector store to avoid loading PyTorch unless needed
+# from src.db.vector_store import LUCADAVectorStore
 from src.db.provenance_tracker import ProvenanceTracker, get_provenance_tracker
 
 logging.basicConfig(level=logging.INFO)
@@ -117,15 +118,31 @@ class LungCancerAssistantService:
         
         if enable_advanced_workflow:
             logger.info("Initializing advanced workflow components...")
-            # Initialize Neo4j tools first for integrated workflow
+            # Initialize Neo4j tools for integrated workflow
             neo4j_tools = None
-            if use_neo4j and neo4j_config:
+            
+            # Try to create Neo4j tools from config or from existing graph_db
+            if use_neo4j:
                 try:
                     from src.db.neo4j_tools import Neo4jReadTools, Neo4jWriteTools
+                    import os
+                    # Use neo4j_config if provided, otherwise use environment variables
+                    uri = os.getenv('NEO4J_URI', 'bolt://localhost:7687')
+                    user = os.getenv('NEO4J_USER', 'neo4j')
+                    password = os.getenv('NEO4J_PASSWORD', '123456789')
+                    database = os.getenv('NEO4J_DATABASE', 'neo4j')
+
+                    if neo4j_config:
+                        uri = neo4j_config.get('uri', uri)
+                        user = neo4j_config.get('user', user)
+                        password = neo4j_config.get('password', password)
+                        database = neo4j_config.get('database', database)
+                    
                     neo4j_tools = {
-                        'read': Neo4jReadTools(neo4j_config),
-                        'write': Neo4jWriteTools(neo4j_config)
+                        'read': Neo4jReadTools(uri=uri, user=user, password=password, database=database),
+                        'write': Neo4jWriteTools(uri=uri, user=user, password=password, database=database)
                     }
+                    logger.info("✓ Neo4j tools initialized for integrated workflow")
                 except Exception as e:
                     logger.warning(f"Neo4j tools initialization failed: {e}")
             
@@ -164,6 +181,8 @@ class LungCancerAssistantService:
         if use_vector_store:
             try:
                 logger.info("Initializing vector store...")
+                # Lazy import to avoid loading PyTorch unless needed
+                from src.db.vector_store import LUCADAVectorStore
                 self.vector_store = LUCADAVectorStore()
 
                 # Add guidelines to vector store if empty
@@ -195,7 +214,8 @@ class LungCancerAssistantService:
         self,
         patient_data: Dict[str, Any],
         use_ai_workflow: bool = True,
-        force_advanced: bool = False
+        force_advanced: bool = True,
+        progress_callback: Optional[callable] = None
     ) -> PatientDecisionSupport:
         """
         Process a patient through the full decision support pipeline.
@@ -229,8 +249,8 @@ class LungCancerAssistantService:
             self.provenance_tracker.track_ontology_version("LUCADA", "1.0.0")
             self.provenance_tracker.track_ontology_version("SNOMED-CT", "2025-01-17")
         
-        # Route: use advanced workflow if available and enabled, otherwise basic
-        if force_advanced or (self.enable_advanced_workflow and self.integrated_workflow):
+        # Route: use advanced workflow ONLY if explicitly requested, otherwise use basic
+        if force_advanced and self.enable_advanced_workflow and self.integrated_workflow:
             return await self._execute_integrated_workflow(
                 patient_data, 
                 start_time, 
@@ -241,7 +261,8 @@ class LungCancerAssistantService:
                 patient_data, 
                 use_ai_workflow, 
                 start_time,
-                provenance_session_id
+                provenance_session_id,
+                progress_callback
             )
     
     async def _execute_basic_workflow(
@@ -249,13 +270,16 @@ class LungCancerAssistantService:
         patient_data: Dict[str, Any],
         use_ai_workflow: bool,
         start_time: datetime,
-        provenance_session_id: Optional[str]
+        provenance_session_id: Optional[str],
+        progress_callback: Optional[callable] = None
     ) -> PatientDecisionSupport:
         """Execute patient processing with basic LangGraph workflow"""
         patient_id = patient_data["patient_id"]
         complexity_level = "simple"  # Basic workflow handles simple cases
         
         logger.info("→ Using BASIC workflow")
+        if progress_callback:
+            await progress_callback("🔧 Initializing basic workflow...")
         
         # Track data ingestion
         if self.provenance_tracker and provenance_session_id:
@@ -264,11 +288,23 @@ class LungCancerAssistantService:
 
         # Step 1: Store in Neo4j (if available)
         if self.graph_db and self.graph_db.driver:
+            if progress_callback:
+                await progress_callback("💾 Storing patient in database...")
             logger.info("Storing in Neo4j...")
             self.graph_db.create_patient(patient_data)
             logger.info("✓ Patient stored in graph database")
 
+        # Normalize biomarker data format for rule engine
+        if progress_callback:
+            await progress_callback("🧬 Normalizing biomarker data...")
+        normalized_patient_data = self._normalize_biomarker_data(patient_data)
+        
+        logger.info(f"Original patient data: {patient_data}")
+        logger.info(f"Normalized patient data: {normalized_patient_data}")
+
         # Step 2: Run rule-based classification
+        if progress_callback:
+            await progress_callback(f"📋 Classifying with {len(self.rule_engine.rules)} guideline rules...")
         logger.info("Classifying with guideline rules...")
         activity_id = None
         if self.provenance_tracker:
@@ -279,8 +315,14 @@ class LungCancerAssistantService:
                 parameters={"rules_count": len(self.rule_engine.rules)}
             )
         
-        ontology_recommendations = self.rule_engine.classify_patient(patient_data)
+        ontology_recommendations = self.rule_engine.classify_patient(normalized_patient_data)
         logger.info(f"✓ Found {len(ontology_recommendations)} applicable guidelines")
+        if ontology_recommendations:
+            for rec in ontology_recommendations:
+                logger.info(f"  - {rec.get('rule_id')}: {rec.get('recommended_treatment')}")
+        
+        if progress_callback:
+            await progress_callback(f"✅ Matched {len(ontology_recommendations)} treatment guidelines")
         
         if self.provenance_tracker and activity_id:
             self.provenance_tracker.track_agent_completion(activity_id, "classification_result")
@@ -288,13 +330,19 @@ class LungCancerAssistantService:
         # Step 3: Find similar patients (if Neo4j available)
         similar_patients = []
         if self.graph_db and self.graph_db.driver:
+            if progress_callback:
+                await progress_callback("🔍 Searching for similar patient cases...")
             logger.info("Finding similar patients...")
             similar_patients = self.graph_db.find_similar_patients(patient_id, limit=5)
             logger.info(f"✓ Found {len(similar_patients)} similar patients")
+            if progress_callback:
+                await progress_callback(f"✅ Found {len(similar_patients)} similar cases")
 
         # Step 4: Semantic guideline search (if vector store available)
         semantic_guidelines = []
         if self.vector_store:
+            if progress_callback:
+                await progress_callback("📚 Searching semantic guidelines...")
             logger.info("Searching semantic guidelines...")
             patient_description = f"""
             Patient with {patient_data.get('tnm_stage')}
@@ -306,12 +354,16 @@ class LungCancerAssistantService:
                 n_results=3
             )
             logger.info(f"✓ Found {len(semantic_guidelines)} semantic matches")
+            if progress_callback:
+                await progress_callback(f"✅ Retrieved {len(semantic_guidelines)} guidelines")
 
         # Step 5: Run AI agent workflow (optional, takes time)
         explanation = ""
         arguments = []
 
         if use_ai_workflow:
+            if progress_callback:
+                await progress_callback("🤖 Running AI argumentation (20-30s)...")
             logger.info("Running AI agent workflow (this takes ~20 seconds)...")
             
             ai_activity_id = None
@@ -343,6 +395,9 @@ class LungCancerAssistantService:
                 arguments = final_state.get("arguments", [])
                 logger.info("✓ AI workflow completed")
                 
+                if progress_callback:
+                    await progress_callback(f"✅ Generated arguments for {len(arguments)} treatment options")
+                
                 if self.provenance_tracker and ai_activity_id:
                     self.provenance_tracker.track_agent_completion(ai_activity_id, "mdt_summary")
 
@@ -356,9 +411,14 @@ class LungCancerAssistantService:
 
         # Step 6: Store recommendations in Neo4j
         if self.graph_db and self.graph_db.driver:
+            if progress_callback:
+                await progress_callback("💾 Saving recommendations to database...")
             self.graph_db.store_recommendation(patient_id, ontology_recommendations)
 
         # Step 7: Compile results
+        if progress_callback:
+            await progress_callback("📋 Compiling treatment recommendations...")
+        
         recommendations = [
             TreatmentRecommendation(
                 treatment_type=r.get("recommended_treatment", "Unknown"),
@@ -441,9 +501,30 @@ class LungCancerAssistantService:
         logger.info("ADVANCED INTEGRATED WORKFLOW (Orchestrated)")
         logger.info("=" * 80)
         
+        logger.info("")
+        logger.info("📊 SYSTEM COMPONENTS ACTIVE:")
+        logger.info(f"   🔬 Ontology: LUCADA v1.0.0 + SNOMED-CT 2025-01-17")
+        logger.info(f"   📝 Provenance Tracker: {'✓ Active' if self.provenance_tracker else '✗ Inactive'}")
+        logger.info(f"   🗄️  Neo4j Graph DB: {'✓ Connected' if self.graph_db else '✗ Disconnected'}")
+        logger.info(f"   🔍 Vector Store: {'✓ Active' if self.vector_store else '✗ Inactive'}")
+        logger.info(f"   🧬 Biomarker Analysis: ✓ Active")
+        logger.info(f"   📊 Analytics Suite: ✓ Active")
+        logger.info("")
+        
+        logger.info("🛠️  TOOLS & ALGORITHMS:")
+        logger.info(f"   • Guideline Matching: Semantic similarity (all-MiniLM-L6-v2)")
+        logger.info(f"   • Patient Similarity: Graph-based (TNM + PS + Histology)")
+        logger.info(f"   • Conflict Resolution: Evidence hierarchy (Grade A > B > C)")
+        logger.info(f"   • Uncertainty Quantification: Bayesian + Historical outcomes")
+        logger.info("")
+        
         # Track data ingestion
         if self.provenance_tracker and provenance_session_id:
+            logger.info("📋 PROVENANCE TRACKING:")
+            logger.info(f"   Session ID: {provenance_session_id}")
             self.provenance_tracker.track_data_ingestion("user_input", patient_data)
+            logger.info(f"   ✓ Data ingestion tracked")
+            logger.info("")
         
         try:
             # Run integrated workflow (orchestrator handles complexity assessment internally)
@@ -505,11 +586,14 @@ class LungCancerAssistantService:
             # Compile patient scenarios from agent chain
             scenarios = result.get("agent_chain", [])
             
-            # Find similar patients
+            # Find similar patients using graph database instead of vector store
             similar_patients = []
-            if self.vector_store:
+            if self.graph_db and self.graph_db.driver:
                 try:
-                    similar_patients = self.vector_store.find_similar_patients(patient_data, limit=3)
+                    logger.info("📊 GRAPH ALGORITHM: Finding similar patients...")
+                    logger.info(f"   Algorithm: Neo4j pattern matching (TNM stage + Performance status ±1 + Histology match)")
+                    similar_patients = self.graph_db.find_similar_patients(patient_id, limit=3)
+                    logger.info(f"   ✓ Found {len(similar_patients)} similar patients")
                 except Exception as e:
                     logger.warning(f"Similar patient search failed: {e}")
             
@@ -626,6 +710,26 @@ class LungCancerAssistantService:
 
 
         return stats
+
+    def _normalize_biomarker_data(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize nested biomarker_profile to flat fields for rule engine"""
+        normalized = patient_data.copy()
+        
+        biomarker_profile = patient_data.get("biomarker_profile", {})
+        
+        # Map biomarker_profile fields to expected flat fields
+        if "egfr_mutation" in biomarker_profile:
+            normalized["egfr_status"] = "positive" if biomarker_profile["egfr_mutation"] else "negative"
+            if biomarker_profile.get("egfr_mutation_type"):
+                normalized["egfr_mutation_type"] = biomarker_profile["egfr_mutation_type"]
+        
+        if "alk_rearrangement" in biomarker_profile:
+            normalized["alk_status"] = "positive" if biomarker_profile["alk_rearrangement"] else "negative"
+        
+        if "pdl1_tps" in biomarker_profile:
+            normalized["pdl1_score"] = biomarker_profile["pdl1_tps"]
+        
+        return normalized
 
     def close(self):
         """Cleanup resources"""

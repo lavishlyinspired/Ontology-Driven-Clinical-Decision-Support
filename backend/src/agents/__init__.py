@@ -39,7 +39,8 @@ from .ingestion_agent import IngestionAgent
 from .semantic_mapping_agent import SemanticMappingAgent
 from .classification_agent import ClassificationAgent, PatientScenario
 from .conflict_resolution_agent import ConflictResolutionAgent, ConflictReport
-from .persistence_agent import PersistenceAgent
+# Lazy import to avoid loading sentence_transformers/torch unless needed
+# from .persistence_agent import PersistenceAgent
 from .explanation_agent import ExplanationAgent
 from .lca_workflow import LCAWorkflow, analyze_patient
 

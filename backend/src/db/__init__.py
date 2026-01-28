@@ -9,7 +9,15 @@ CRITICAL PRINCIPLE from final.md: "Neo4j as a tool, not a brain"
 """
 
 from .neo4j_schema import LUCADAGraphDB, Neo4jConfig
-from .vector_store import LUCADAVectorStore
+
+# Lazy import for vector store to avoid loading heavy dependencies unless needed
+def get_vector_store():
+    """Lazy loader for LUCADAVectorStore to defer PyTorch/transformers imports"""
+    from .vector_store import LUCADAVectorStore
+    return LUCADAVectorStore
+
+# For backwards compatibility
+LUCADAVectorStore = None  # Will be imported on demand
 
 # New models per final.md PHASE 3
 from .models import (

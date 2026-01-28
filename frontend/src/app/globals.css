@@ -1,70 +1,293 @@
-:root {
-  color-scheme: dark;
-  --bg: #030711;
-  --surface: rgba(9, 11, 30, 0.7);
-  --border: rgba(255, 255, 255, 0.1);
-  --accent: #63e6be;
-  --accent-strong: #f97316;
-  --text: #f8fafc;
-  --muted: rgba(248, 250, 252, 0.7);
-  --glow: 0 0 45px rgba(99, 230, 190, 0.45);
-  font-family: "Space Grotesk", "Inter", system-ui;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-white text-gray-900;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+  }
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: radial-gradient(circle at top right, rgba(99, 230, 190, 0.35), transparent 45%),
-    radial-gradient(circle at 20% 20%, rgba(248, 113, 32, 0.25), transparent 35%),
-    #030711;
-  color: var(--text);
-  font-family: inherit;
-  line-height: 1.6;
+/* Layout */
+.app-container {
+  @apply flex min-h-screen bg-white;
 }
 
-.gradient-panel {
-  background: linear-gradient(180deg, rgba(3, 7, 17, 0.92) 0%, rgba(7, 10, 24, 0.95) 40%, rgba(12, 18, 30, 0.95) 100%);
-  padding: 2rem 0 4rem;
+/* Sidebar Navigation */
+.sidebar {
+  @apply w-64 bg-white border-r border-gray-200 flex flex-col fixed h-screen top-0 left-0 z-40;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: "Space Grotesk", "Inter", system-ui;
-  letter-spacing: -0.02em;
+.sidebar-header {
+  @apply px-6 py-5 border-b border-gray-200;
 }
 
-main {
-  width: min(1200px, 100%);
-  margin: 0 auto;
-  padding: 3vw 1.5rem 4rem;
+.sidebar-title {
+  @apply text-xl font-bold text-blue-600 m-0 flex items-center gap-2;
 }
 
-.section {
-  margin-top: 3.5rem;
+.sidebar-subtitle {
+  @apply text-xs text-gray-500 mt-1 m-0;
 }
 
-.grid {
-  display: grid;
-  gap: 1.5rem;
+.nav-list {
+  @apply flex-1 py-4 m-0 list-none overflow-y-auto;
 }
 
+.nav-link {
+  @apply flex items-center px-6 py-3 text-gray-600 no-underline transition-all gap-3 hover:bg-gray-50 hover:text-gray-900;
+}
+
+.nav-link.active {
+  @apply bg-blue-50 text-blue-600 font-medium border-r-2 border-blue-600;
+}
+
+.nav-icon {
+  @apply w-5 h-5 flex items-center justify-center;
+}
+
+.nav-label {
+  @apply text-sm;
+}
+
+.sidebar-footer {
+  @apply px-6 py-4 border-t border-gray-200;
+}
+
+.status-indicator {
+  @apply flex items-center gap-2 text-xs text-gray-500;
+}
+
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-active {
+  @apply bg-green-500;
+}
+
+/* Main Content */
+.main-content {
+  @apply flex-1 ml-64 p-8 bg-white;
+}
+
+/* Cards */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 1.75rem;
-  box-shadow: var(--glow);
+  @apply bg-white border border-gray-200 rounded-lg p-6 shadow-sm transition-all hover:shadow-md;
 }
 
-.glow-border {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(145deg, rgba(99, 230, 190, 0.15), rgba(15, 23, 42, 0.9));
+.card-header {
+  @apply mb-4;
+}
+
+.card-title {
+  @apply text-lg font-semibold text-gray-900 mb-1;
+}
+
+.card-description {
+  @apply text-sm text-gray-500;
+}
+
+.card-content {
+  @apply text-gray-800;
+}
+
+/* Buttons */
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-all cursor-pointer border-none no-underline;
+}
+
+.btn-primary {
+  @apply bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-900 hover:bg-gray-200;
+}
+
+.btn-outline {
+  @apply border border-gray-300 text-gray-700 hover:bg-gray-50;
+}
+
+/* Inputs */
+input[type="text"],
+input[type="email"],
+textarea {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+}
+
+/* Typography */
+h1 {
+  @apply text-3xl font-bold text-gray-900 mb-4;
+}
+
+h2 {
+  @apply text-2xl font-semibold text-gray-900 mb-3;
+}
+
+h3 {
+  @apply text-xl font-semibold text-gray-900 mb-2;
+}
+
+.muted {
+  @apply text-gray-500 text-sm;
+}
+
+/* Section */
+.section {
+  @apply mb-8;
+}
+
+/* Chat specific styles */
+.message-container {
+  @apply flex gap-3 mb-4;
+}
+
+.message-avatar {
+  @apply w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0;
+}
+
+.message-avatar.user {
+  @apply bg-gray-100 text-gray-600;
+}
+
+.message-avatar.assistant {
+  @apply bg-blue-100 text-blue-600;
+}
+
+.message-content {
+  @apply flex-1;
+}
+
+.message-bubble {
+  @apply rounded-lg p-4 mb-2;
+}
+
+.message-bubble.user {
+  @apply bg-gray-50 border border-gray-200;
+}
+
+.message-bubble.assistant {
+  @apply bg-white border border-gray-200;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out both;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Prose styling for markdown */
+.prose-blue h1, .prose-blue h2, .prose-blue h3 {
+  @apply text-blue-900;
+}
+
+.prose-blue strong {
+  @apply text-gray-900 font-bold;
+}
+
+.prose-blue code {
+  @apply bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm;
+}
+
+.prose-blue pre {
+  @apply bg-gray-900 text-green-400 rounded-lg p-4 overflow-x-auto;
+}
+
+.prose-blue ul, .prose-blue ol {
+  @apply my-2;
+}
+
+.prose-blue li {
+  @apply my-1;
+}
+
+.prose-blue p {
+  @apply my-2 leading-relaxed;
+}
+
+.prose-blue a {
+  @apply text-blue-600 hover:text-blue-800 underline;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full hover:bg-gray-400;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    @apply hidden;
+  }
+  
+  .main-content {
+    @apply ml-0;
+  }
 }

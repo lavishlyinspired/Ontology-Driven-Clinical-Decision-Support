@@ -241,8 +241,8 @@ class Neo4jReadTools:
                         patient_id=p.get("patient_id"),
                         name=p.get("name", "Unknown"),
                         similarity_score=score,
-                        tnm_stage=p.get("tnm_stage"),
-                        histology_type=p.get("histology_type"),
+                        tnm_stage=p.get("tnm_stage") or "Unknown",
+                        histology_type=p.get("histology_type") or "Unknown",
                         treatment_received=t.get("type") if t else None,
                         outcome=o.get("status") if o else None,
                         survival_days=o.get("survival_days") if o else None

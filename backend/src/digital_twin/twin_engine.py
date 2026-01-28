@@ -145,11 +145,15 @@ class DigitalTwinEngine:
             user=neo4j_user,
             password=neo4j_password
         )
-        self.graph_db = LUCADAGraphDB(
-            uri=neo4j_uri,
-            user=neo4j_user,
-            password=neo4j_password
+        # LUCADAGraphDB uses Neo4jConfig object
+        from ..db.neo4j_schema import Neo4jConfig
+        neo4j_config = Neo4jConfig(
+            uri=neo4j_uri or "bolt://localhost:7687",
+            user=neo4j_user or "neo4j",
+            password=neo4j_password or "password",
+            database="neo4j"
         )
+        self.graph_db = LUCADAGraphDB(config=neo4j_config)
         
         # Specialized agents
         self.agents = {
@@ -175,6 +179,85 @@ class DigitalTwinEngine:
         }
         
         logger.info(f"✓ Digital Twin Engine initialized: {self.twin_id} for patient {patient_id}")
+    
+    def _build_agent_registry(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Build agent registry with wrapper functions for async compatibility"""
+        from ..agents.ingestion_agent import IngestionAgent
+        from ..agents.semantic_mapping_agent import SemanticMappingAgent
+        from ..agents.classification_agent import ClassificationAgent
+        from ..agents.explanation_agent import ExplanationAgent
+        from ..agents.conflict_resolution_agent import ConflictResolutionAgent
+        
+        # Initialize core agents
+        ingestion = IngestionAgent()
+        semantic_mapping = SemanticMappingAgent()
+        classification = ClassificationAgent()
+        explanation = ExplanationAgent()
+        conflict_resolution = ConflictResolutionAgent()
+        
+        async def ingestion_wrapper(data):
+            result, errors = ingestion.execute(data)
+            return result
+        
+        async def semantic_mapping_wrapper(data):
+            ingestion_result = data.get("IngestionAgent_output", data)
+            result, confidence = semantic_mapping.execute(ingestion_result)
+            return result
+        
+        async def classification_wrapper(data):
+            mapped_data = data.get("SemanticMappingAgent_output", data)
+            return classification.execute(mapped_data)
+        
+        async def conflict_wrapper(data):
+            classification_result = data.get("ClassificationAgent_output")
+            if classification_result:
+                resolved, _ = conflict_resolution.execute(classification_result)
+                return resolved
+            return classification_result
+        
+        async def explanation_wrapper(data):
+            patient_with_codes = data.get("SemanticMappingAgent_output", data)
+            classification_result = data.get("ClassificationAgent_output")
+            if classification_result:
+                return explanation.execute(patient_with_codes, classification_result)
+            return "No classification available"
+        
+        async def biomarker_wrapper(data):
+            patient_with_codes = data.get("SemanticMappingAgent_output", data)
+            return self.agents["biomarker"].execute(patient_with_codes, None)
+        
+        async def nsclc_wrapper(data):
+            if patient_data.get("cancer_type") == "NSCLC":
+                patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                return self.agents["nsclc"].execute(patient_with_codes, {})
+            return None
+        
+        async def sclc_wrapper(data):
+            if patient_data.get("cancer_type") == "SCLC":
+                patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                return self.agents["sclc"].execute(patient_with_codes)
+            return None
+        
+        async def comorbidity_wrapper(data):
+            patient_with_codes = data.get("SemanticMappingAgent_output", data)
+            classification_result = data.get("ClassificationAgent_output")
+            treatment = "Unknown"
+            if classification_result and hasattr(classification_result, 'recommendations') and classification_result.recommendations:
+                rec = classification_result.recommendations[0]
+                treatment = rec.get('treatment', 'Unknown') if isinstance(rec, dict) else getattr(rec, 'treatment', 'Unknown')
+            return self.agents["comorbidity"].execute(patient_with_codes, treatment, None)
+        
+        return {
+            "IngestionAgent": ingestion_wrapper,
+            "SemanticMappingAgent": semantic_mapping_wrapper,
+            "ClassificationAgent": classification_wrapper,
+            "ConflictResolutionAgent": conflict_wrapper,
+            "ExplanationAgent": explanation_wrapper,
+            "BiomarkerAgent": biomarker_wrapper,
+            "NSCLCAgent": nsclc_wrapper,
+            "SCLCAgent": sclc_wrapper,
+            "ComorbidityAgent": comorbidity_wrapper
+        }
         
     async def initialize(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -204,16 +287,8 @@ class DigitalTwinEngine:
         )
         self.context_graph.add_node(patient_node)
         
-        # Step 2: Run initial agent analysis
-        agent_registry = {
-            "BiomarkerAgent": self.agents["biomarker"].execute,
-            "NSCLCAgent": self.agents["nsclc"].execute if patient_data.get("cancer_type") == "NSCLC" else None,
-            "SCLCAgent": self.agents["sclc"].execute if patient_data.get("cancer_type") == "SCLC" else None,
-            "ComorbidityAgent": self.agents["comorbidity"].execute
-        }
-        
-        # Filter out None agents
-        agent_registry = {k: v for k, v in agent_registry.items() if v is not None}
+        # Step 2: Build agent registry with wrapper functions for async compatibility
+        agent_registry = self._build_agent_registry(patient_data)
         
         # Run orchestrated workflow
         baseline_result = await self.orchestrator.orchestrate_adaptive_workflow(

@@ -34,6 +34,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Prometheus metrics (optional)
+REQUEST_COUNT = Counter(
+    'lca_http_requests_total',
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status']
+)
+REQUEST_LATENCY = Histogram(
+    'lca_http_request_duration_seconds',
+    'HTTP request latency',
+    ['method', 'endpoint']
+)
+
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -58,7 +70,8 @@ from src.api.routes import (
     biomarker_detail_router,
     counterfactual_router,
     export_router,
-    system_router
+    system_router,
+    chat_router
 )
 
 # Initialize FastAPI
@@ -121,17 +134,20 @@ async def log_requests(request: Request, call_next):
             "latency_seconds": latency
         })
         
-        # Update Prometheus metrics
-        if os.getenv("METRICS_ENABLED", "true").lower() == "true":
-            REQUEST_COUNT.labels(
-                method=request.method,
-                endpoint=request.url.path,
-                status=response.status_code
-            ).inc()
-            REQUEST_LATENCY.labels(
-                method=request.method,
-                endpoint=request.url.path
-            ).observe(latency)
+        # Update Prometheus metrics (disabled by default to avoid overhead)
+        if os.getenv("METRICS_ENABLED", "false").lower() == "true":
+            try:
+                REQUEST_COUNT.labels(
+                    method=request.method,
+                    endpoint=request.url.path,
+                    status=response.status_code
+                ).inc()
+                REQUEST_LATENCY.labels(
+                    method=request.method,
+                    endpoint=request.url.path
+                ).observe(latency)
+            except Exception:
+                pass  # Silently ignore metrics errors
         
         # Add custom headers
         response.headers["X-Request-ID"] = request_id
@@ -203,6 +219,7 @@ app.include_router(biomarker_detail_router)  # Already has /api/v1/biomarkers pr
 app.include_router(counterfactual_router)  # Already has /api/v1/analytics prefix
 app.include_router(export_router)  # Already has /api/v1/export prefix
 app.include_router(system_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")  # Chat streaming endpoint
 
 # Global service instance
 lca_service: Optional[LungCancerAssistantService] = None

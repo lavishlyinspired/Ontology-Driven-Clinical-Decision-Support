@@ -57,6 +57,10 @@ class LUCADAGraphDB:
         )
 
         try:
+            # Suppress Neo4j warnings about non-existent relationships (expected for new patients)
+            import warnings
+            warnings.filterwarnings('ignore', category=DeprecationWarning, module='neo4j')
+            
             self.driver = GraphDatabase.driver(
                 self.config.uri,
                 auth=(self.config.user, self.config.password)
@@ -66,6 +70,11 @@ class LUCADAGraphDB:
             logger.warning(f"Could not connect to Neo4j: {e}")
             logger.warning("Graph database features will be disabled")
             self.driver = None
+
+    @property
+    def is_available(self) -> bool:
+        """Check if Neo4j connection is available"""
+        return self.driver is not None
 
     def setup_schema(self):
         """Initialize database schema"""
@@ -208,26 +217,57 @@ class LUCADAGraphDB:
         if not self.driver:
             return
 
+        # Filter out recommendations with null/empty treatment types
+        valid_recommendations = [
+            rec for rec in recommendations 
+            if rec.get('treatment') or rec.get('recommended_treatment')
+        ]
+        
+        if not valid_recommendations:
+            logger.warning(f"No valid recommendations to store for patient {patient_id}")
+            return
+
+        # Normalize treatment field name
+        normalized_recs = []
+        for rec in valid_recommendations:
+            treatment = rec.get('treatment') or rec.get('recommended_treatment')
+            normalized_recs.append({
+                'treatment': treatment,
+                'rule_id': rec.get('rule_id', 'UNKNOWN'),
+                'evidence_level': rec.get('evidence_level', 'Grade C'),
+                'priority': rec.get('priority', 0)
+            })
+
         query = """
         MATCH (p:Patient {patient_id: $patient_id})
 
         FOREACH (rec IN $recommendations |
             MERGE (tp:TreatmentPlan {type: rec.treatment})
+            SET tp.plan_id = rec.treatment + '_' + p.patient_id,
+                tp.intent = rec.treatment_intent,
+                tp.evidence_level = rec.evidence_level,
+                tp.created_at = datetime()
+            
             MERGE (r:GuidelineRule {rule_id: rec.rule_id})
             SET r.evidence_level = rec.evidence_level,
                 r.priority = rec.priority
-            MERGE (p)-[:RECOMMENDED_TREATMENT {
+            
+            MERGE (p)-[rel:RECOMMENDED_TREATMENT {
                 priority: rec.priority,
                 timestamp: datetime()
             }]->(tp)
+            
             MERGE (r)-[:RECOMMENDS]->(tp)
+            
+            // Create HAS_TREATMENT_PLAN relationship for compatibility
+            MERGE (p)-[:HAS_TREATMENT_PLAN]->(tp)
         )
         """
 
         try:
             with self.driver.session(database=self.config.database) as session:
-                session.run(query, patient_id=patient_id, recommendations=recommendations)
-                logger.debug(f"Stored {len(recommendations)} recommendations for {patient_id}")
+                session.run(query, patient_id=patient_id, recommendations=normalized_recs)
+                logger.debug(f"Stored {len(normalized_recs)} recommendations for {patient_id}")
         except Exception as e:
             logger.error(f"Failed to store recommendations: {e}")
 

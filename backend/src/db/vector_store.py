@@ -262,6 +262,30 @@ class LUCADAVectorStore:
             logger.info("✓ Neo4j connection closed")
 
 
+# Module-level singleton instance (lazy-loaded)
+_vector_store_instance: Optional[LUCADAVectorStore] = None
+
+
+def get_vector_store() -> Optional[LUCADAVectorStore]:
+    """Get or create the singleton vector store instance."""
+    global _vector_store_instance
+    if _vector_store_instance is None:
+        try:
+            _vector_store_instance = LUCADAVectorStore()
+        except Exception as e:
+            logger.warning(f"Could not initialize vector store: {e}")
+            return None
+    return _vector_store_instance
+
+
+# Expose module-level instance for backward compatibility
+# This will attempt to initialize on import, with safe fallback
+try:
+    vector_store = LUCADAVectorStore()
+except Exception as e:
+    logger.warning(f"Could not create module-level vector_store: {e}")
+    vector_store = None
+
 
 # Test function
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ class ConversationService:
     def __init__(self, lca_service):
         self.lca_service = lca_service
         self.sessions: Dict[str, List[Dict]] = {}  # session_id -> message history
+        self.patient_context: Dict[str, Dict] = {}  # session_id -> {patient_data, result}
         
     def _get_session(self, session_id: str) -> List[Dict]:
         """Get or create conversation session"""
@@ -66,7 +67,7 @@ class ConversationService:
             intent = self._classify_intent(message)
             
             if intent == "patient_analysis":
-                async for chunk in self._stream_patient_analysis(message):
+                async for chunk in self._stream_patient_analysis(message, session_id):
                     yield chunk
             else:
                 async for chunk in self._stream_general_qa(message, session_id):
@@ -104,7 +105,7 @@ class ConversationService:
         
         return "general_qa"
     
-    async def _stream_patient_analysis(self, message: str) -> AsyncIterator[str]:
+    async def _stream_patient_analysis(self, message: str, session_id: str = None) -> AsyncIterator[str]:
         """Stream patient analysis workflow"""
         
         # Step 1: Extract patient data
@@ -152,18 +153,53 @@ class ConversationService:
                 "content": f"⚙️ Running {complexity['recommended_workflow']} workflow..."
             })
             
-            # Execute with streaming updates
+            # Create a queue for progress messages
+            progress_messages = []
+            
+            async def capture_progress(message: str):
+                """Capture progress messages to yield later"""
+                progress_messages.append(message)
+            
+            # Execute with streaming updates and AI workflow enabled
             result = await self.lca_service.process_patient(
                 patient_data=patient_data,
-                use_ai_workflow=True,
-                force_advanced=use_advanced
+                use_ai_workflow=True,  # Enabled for comprehensive clinical argumentation
+                force_advanced=use_advanced,
+                progress_callback=capture_progress
             )
+            
+            # Stream collected progress messages
+            for msg in progress_messages:
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": msg
+                })
+            
+            # Show matched rules summary
+            if result.recommendations:
+                rules_summary = ", ".join([f"{r.rule_id} ({r.treatment_type})" for r in result.recommendations[:3]])
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"✅ Matched guidelines: {rules_summary}"
+                })
+            
+            # Store in session context for follow-up questions
+            if session_id:
+                self.patient_context[session_id] = {
+                    "patient_data": patient_data,
+                    "result": result
+                }
             
             # Step 4: Stream results
             yield self._format_sse({
                 "type": "status",
                 "content": f"✅ Analysis complete ({result.execution_time_ms}ms)"
             })
+            
+            # Debug logging
+            logger.info(f"Result has {len(result.recommendations)} recommendations")
+            if result.recommendations:
+                logger.info(f"First recommendation: {result.recommendations[0]}")
             
             # Format recommendations
             recommendations_text = self._format_recommendations(result)
@@ -205,16 +241,39 @@ class ConversationService:
             "content": "💭 Thinking..."
         })
         
-        # Get conversation history
-        history = self._get_session(session_id)
+        # Check if this is a follow-up question about a patient
+        follow_up_keywords = [
+            r'alternative.*treatment',
+            r'other.*option',
+            r'different.*therapy',
+            r'explain.*reasoning',
+            r'similar.*case',
+            r'comorbidity.*interaction',
+            r'side.*effect'
+        ]
         
-        # Simple response for now (can be enhanced with LLM)
-        response = self._generate_qa_response(message, history)
+        is_follow_up = any(re.search(pattern, message, re.IGNORECASE) for pattern in follow_up_keywords)
         
-        yield self._format_sse({
-            "type": "text",
-            "content": response
-        })
+        if is_follow_up and session_id in self.patient_context:
+            # Handle follow-up questions using stored context
+            context = self.patient_context[session_id]
+            response = self._handle_follow_up(message, context)
+            
+            yield self._format_sse({
+                "type": "text",
+                "content": response
+            })
+        else:
+            # Get conversation history
+            history = self._get_session(session_id)
+            
+            # Simple response for now (can be enhanced with LLM)
+            response = self._generate_qa_response(message, history)
+            
+            yield self._format_sse({
+                "type": "text",
+                "content": response
+            })
         
         self._add_to_history(session_id, "assistant", response)
     
@@ -228,20 +287,27 @@ class ConversationService:
             "patient_id": f"CHAT_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         }
         
-        # Extract age
-        age_match = re.search(r'(\d{2})[-\s]?(year|yr)[-\s]?old', message, re.IGNORECASE)
-        if age_match:
-            data["age"] = int(age_match.group(1))
-        
-        # Extract sex
-        sex_patterns = [
-            (r'\b(male|M)\b(?![\w-])', 'M'),
-            (r'\b(female|F)\b(?![\w-])', 'F'),
-        ]
-        for pattern, sex_value in sex_patterns:
-            if re.search(pattern, message, re.IGNORECASE):
-                data["sex"] = sex_value
-                break
+        # Extract age and sex (handle formats like "68M", "68F", "68 year old male", etc.)
+        # Try compact format first (e.g., "68M", "72F")
+        age_sex_match = re.search(r'\b(\d{2,3})\s*([MF])\b', message, re.IGNORECASE)
+        if age_sex_match:
+            data["age"] = int(age_sex_match.group(1))
+            data["sex"] = age_sex_match.group(2).upper()
+        else:
+            # Extract age from verbose format
+            age_match = re.search(r'(\d{2,3})[-\s]?(year|yr)[-\s]?old', message, re.IGNORECASE)
+            if age_match:
+                data["age"] = int(age_match.group(1))
+            
+            # Extract sex separately
+            sex_patterns = [
+                (r'\b(male|M)\b(?![\w-])', 'M'),
+                (r'\b(female|F)\b(?![\w-])', 'F'),
+            ]
+            for pattern, sex_value in sex_patterns:
+                if re.search(pattern, message, re.IGNORECASE):
+                    data["sex"] = sex_value
+                    break
         
         # Extract TNM stage
         stage_match = re.search(r'stage\s+(I{1,3}[ABC]?|IV)', message, re.IGNORECASE)
@@ -331,32 +397,112 @@ class ConversationService:
     def _format_recommendations(self, result) -> str:
         """Format recommendations as markdown"""
         if not result.recommendations:
-            return "No recommendations available."
+            return "ℹ️ **No specific treatment recommendations generated.**\n\nThis may be because additional patient information is needed or the case requires manual MDT review."
         
-        primary = result.recommendations[0]
+        # Handle both TreatmentRecommendation objects and dicts
+        recommendations = result.recommendations
         
-        text = f"""
-## Primary Recommendation: {primary.treatment_type}
+        # Convert first recommendation to dict if needed
+        if recommendations:
+            primary = recommendations[0]
+            if isinstance(primary, dict):
+                # Already a dict
+                treatment = primary.get('treatment', 'Unknown')
+                evidence = primary.get('evidence_level', 'Not specified')
+                confidence = primary.get('confidence_score', 0)
+                if isinstance(confidence, (int, float)):
+                    confidence = int(confidence * 100) if confidence <= 1 else int(confidence)
+                source = primary.get('guideline_reference', primary.get('rule_source', 'Clinical Guidelines'))
+                intent = primary.get('intent', 'Not specified')
+                rationale = primary.get('rationale', '')
+                contraindications = primary.get('contraindications', [])
+                survival = primary.get('survival_benefit', '')
+            else:
+                # TreatmentRecommendation object
+                treatment = getattr(primary, 'treatment_type', getattr(primary, 'treatment', 'Unknown'))
+                evidence = getattr(primary, 'evidence_level', 'Not specified')
+                confidence = getattr(primary, 'confidence_score', 0)
+                if isinstance(confidence, (int, float)):
+                    confidence = int(confidence * 100) if confidence <= 1 else int(confidence)
+                source = getattr(primary, 'rule_source', getattr(primary, 'guideline_reference', 'Clinical Guidelines'))
+                intent = getattr(primary, 'treatment_intent', getattr(primary, 'intent', 'Not specified'))
+                rationale = getattr(primary, 'rationale', '')
+                contraindications = getattr(primary, 'contraindications', [])
+                survival = getattr(primary, 'survival_benefit', '')
+            
+            text = f"""
+## 🎯 Primary Recommendation: {treatment}
 
-- **Evidence Level:** {primary.evidence_level}
-- **Confidence:** {int(primary.confidence_score * 100)}%
-- **Source:** {primary.rule_source}
-- **Intent:** {primary.treatment_intent}
+- **Evidence Level:** {evidence}
+- **Confidence:** {confidence}%
+- **Source:** {source}
+- **Intent:** {intent}
 """
+            
+            if rationale:
+                text += f"\n**Rationale:** {rationale}\n"
+            
+            if survival:
+                text += f"- **Expected Benefit:** {survival}\n"
+            
+            if contraindications:
+                text += f"\n**⚠️ Contraindications:**\n"
+                for contra in contraindications:
+                    text += f"- {contra}\n"
+            
+            # Add alternative options if available
+            if len(recommendations) > 1:
+                text += f"\n### Alternative Options:\n"
+                for i, alt_rec in enumerate(recommendations[1:3], 2):  # Show up to 2 alternatives
+                    if isinstance(alt_rec, dict):
+                        alt_treatment = alt_rec.get('treatment', 'Unknown')
+                        alt_evidence = alt_rec.get('evidence_level', 'Not specified')
+                    else:
+                        alt_treatment = getattr(alt_rec, 'treatment_type', getattr(alt_rec, 'treatment', 'Unknown'))
+                        alt_evidence = getattr(alt_rec, 'evidence_level', 'Not specified')
+                    text += f"{i}. {alt_treatment} (Evidence: {alt_evidence})\n"
+            
+            return text
         
-        if primary.survival_benefit:
-            text += f"- **Expected Benefit:** {primary.survival_benefit}\n"
+        return "ℹ️ **No specific treatment recommendations generated.**"
+    
+    def _handle_follow_up(self, message: str, context: Dict) -> str:
+        """Handle follow-up questions about a patient case"""
+        result = context["result"]
+        patient_data = context["patient_data"]
         
-        if primary.contraindications:
-            text += f"\n**Contraindications:** {', '.join(primary.contraindications)}\n"
+        message_lower = message.lower()
         
-        # Add alternatives
-        if len(result.recommendations) > 1:
-            text += "\n### Alternative Options:\n"
-            for rec in result.recommendations[1:3]:  # Top 2 alternatives
-                text += f"- {rec.treatment_type} (Evidence: {rec.evidence_level}, Confidence: {int(rec.confidence_score * 100)}%)\n"
+        if "alternative" in message_lower or "other" in message_lower:
+            # Show alternative treatments
+            if len(result.recommendations) > 1:
+                text = "### Alternative Treatment Options:\n\n"
+                for i, rec in enumerate(result.recommendations[1:4], 2):
+                    text += f"**{i}. {rec.treatment_type}**\n"
+                    text += f"- Evidence: {rec.evidence_level}\n"
+                    text += f"- Confidence: {int(rec.confidence_score * 100)}%\n"
+                    text += f"- Intent: {rec.treatment_intent}\n"
+                    if rec.survival_benefit:
+                        text += f"- Expected Benefit: {rec.survival_benefit}\n"
+                    text += "\n"
+                return text
+            else:
+                return "No alternative treatments are available based on current guidelines."
         
-        return text
+        elif "reasoning" in message_lower or "explain" in message_lower:
+            return result.mdt_summary
+        
+        elif "similar" in message_lower:
+            if result.similar_patients:
+                text = f"### Found {len(result.similar_patients)} Similar Cases:\n\n"
+                for i, patient in enumerate(result.similar_patients[:3], 1):
+                    text += f"{i}. {patient.get('summary', 'Similar patient case')}\n"
+                return text
+            else:
+                return "No similar cases found in the database."
+        
+        else:
+            return "I can help with: alternative treatments, reasoning explanation, or similar cases. What would you like to know?"
     
     def _generate_qa_response(self, message: str, history: List[Dict]) -> str:
         """Generate response for general questions"""

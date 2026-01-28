@@ -1,0 +1,1589 @@
+[
+  {
+    "patient_id": "E2C36CA7",
+    "name": "Elizabeth Smith",
+    "sex": "F",
+    "age_at_diagnosis": 71,
+    "tnm_stage": "IIIA",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-09-25T17:56:54.369549",
+    "fev1_percent": 74.5,
+    "comorbidities": [
+      "RenalDisease"
+    ],
+    "age": 71
+  },
+  {
+    "patient_id": "3BAB7FB4",
+    "name": "Thomas Williams",
+    "sex": "M",
+    "age_at_diagnosis": 76,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-08-17T17:56:54.370057",
+    "fev1_percent": 62.1,
+    "comorbidities": [
+      "RenalDisease",
+      "Diabetes"
+    ],
+    "age": 76
+  },
+  {
+    "patient_id": "1635FF10",
+    "name": "Elizabeth Garcia",
+    "sex": "F",
+    "age_at_diagnosis": 73,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-01-28T17:56:54.370136",
+    "fev1_percent": 57.6,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "Diabetes",
+      "Hypertension"
+    ],
+    "age": 73
+  },
+  {
+    "patient_id": "19785351",
+    "name": "James Brown",
+    "sex": "M",
+    "age_at_diagnosis": 64,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-06-20T17:56:54.370136",
+    "fev1_percent": 33.4,
+    "comorbidities": [],
+    "age": 64
+  },
+  {
+    "patient_id": "AA6C8FA3",
+    "name": "Karen Jones",
+    "sex": "F",
+    "age_at_diagnosis": 57,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-06-29T17:56:54.370136",
+    "fev1_percent": 63.1,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 57
+  },
+  {
+    "patient_id": "B19E6BBA",
+    "name": "Elizabeth Smith",
+    "sex": "F",
+    "age_at_diagnosis": 74,
+    "tnm_stage": "IIIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-09-13T17:56:54.370136",
+    "fev1_percent": 48.2,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 74
+  },
+  {
+    "patient_id": "EC6E8CEE",
+    "name": "Elizabeth Johnson",
+    "sex": "F",
+    "age_at_diagnosis": 81,
+    "tnm_stage": "IA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Right",
+    "diagnosis_date": "2025-03-11T17:56:54.370136",
+    "fev1_percent": 66.3,
+    "comorbidities": [],
+    "age": 81
+  },
+  {
+    "patient_id": "04455BD8",
+    "name": "Joseph Miller",
+    "sex": "M",
+    "age_at_diagnosis": 73,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 4,
+    "laterality": "Right",
+    "diagnosis_date": "2025-05-18T17:56:54.370136",
+    "fev1_percent": 30,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 73
+  },
+  {
+    "patient_id": "65FAA3A8",
+    "name": "Karen Jones",
+    "sex": "F",
+    "age_at_diagnosis": 67,
+    "tnm_stage": "IIIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-04-18T17:56:54.370136",
+    "fev1_percent": 52.3,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "COPD"
+    ],
+    "age": 67
+  },
+  {
+    "patient_id": "4688BE75",
+    "name": "Charles Davis",
+    "sex": "M",
+    "age_at_diagnosis": 74,
+    "tnm_stage": "IIB",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-06-29T17:56:54.370136",
+    "fev1_percent": 61.8,
+    "comorbidities": [],
+    "age": 74
+  },
+  {
+    "patient_id": "275D542D",
+    "name": "Elizabeth Williams",
+    "sex": "F",
+    "age_at_diagnosis": 55,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 3,
+    "laterality": "Right",
+    "diagnosis_date": "2025-11-05T17:56:54.370136",
+    "fev1_percent": 70.4,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "Hypertension"
+    ],
+    "age": 55
+  },
+  {
+    "patient_id": "13BE9040",
+    "name": "Elizabeth Garcia",
+    "sex": "F",
+    "age_at_diagnosis": 70,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-09-02T17:56:54.370136",
+    "fev1_percent": 39.0,
+    "comorbidities": [
+      "COPD",
+      "CardiovascularDisease"
+    ],
+    "age": 70
+  },
+  {
+    "patient_id": "FDC8CF46",
+    "name": "Thomas Jones",
+    "sex": "M",
+    "age_at_diagnosis": 77,
+    "tnm_stage": "IIIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-11-05T17:56:54.370136",
+    "fev1_percent": 66.3,
+    "comorbidities": [
+      "COPD",
+      "Dementia"
+    ],
+    "age": 77
+  },
+  {
+    "patient_id": "CB075B11",
+    "name": "Robert Williams",
+    "sex": "M",
+    "age_at_diagnosis": 80,
+    "tnm_stage": "IIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Left",
+    "diagnosis_date": "2025-12-27T17:56:54.370735",
+    "fev1_percent": 102.2,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 80
+  },
+  {
+    "patient_id": "F2251CB8",
+    "name": "Susan Davis",
+    "sex": "F",
+    "age_at_diagnosis": 95,
+    "tnm_stage": "IIA",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-07-29T17:56:54.370735",
+    "fev1_percent": 91.3,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 95
+  },
+  {
+    "patient_id": "C61211CC",
+    "name": "Jessica Williams",
+    "sex": "F",
+    "age_at_diagnosis": 53,
+    "tnm_stage": "IIIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-05-03T17:56:54.370735",
+    "fev1_percent": 50.4,
+    "comorbidities": [],
+    "age": 53
+  },
+  {
+    "patient_id": "A7A7EF4C",
+    "name": "Barbara Johnson",
+    "sex": "F",
+    "age_at_diagnosis": 68,
+    "tnm_stage": "IB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-12-01T17:56:54.370735",
+    "fev1_percent": 95.5,
+    "comorbidities": [],
+    "age": 68
+  },
+  {
+    "patient_id": "BE5FD23F",
+    "name": "Joseph Brown",
+    "sex": "M",
+    "age_at_diagnosis": 80,
+    "tnm_stage": "IA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Left",
+    "diagnosis_date": "2025-06-17T17:56:54.370735",
+    "fev1_percent": 108.8,
+    "comorbidities": [
+      "Hypertension"
+    ],
+    "age": 80
+  },
+  {
+    "patient_id": "18CF0F28",
+    "name": "Richard Garcia",
+    "sex": "M",
+    "age_at_diagnosis": 63,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-03-23T17:56:54.370735",
+    "fev1_percent": 62.7,
+    "comorbidities": [
+      "Hypertension"
+    ],
+    "age": 63
+  },
+  {
+    "patient_id": "ADFE0FED",
+    "name": "Robert Davis",
+    "sex": "M",
+    "age_at_diagnosis": 72,
+    "tnm_stage": "IA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Right",
+    "diagnosis_date": "2025-04-13T17:56:54.370735",
+    "fev1_percent": 120,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 72
+  },
+  {
+    "patient_id": "0341779F",
+    "name": "Linda Jones",
+    "sex": "F",
+    "age_at_diagnosis": 59,
+    "tnm_stage": "IIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-04-10T17:56:54.370735",
+    "fev1_percent": 76.9,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 59
+  },
+  {
+    "patient_id": "4E985F90",
+    "name": "Linda Johnson",
+    "sex": "F",
+    "age_at_diagnosis": 70,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 3,
+    "laterality": "Left",
+    "diagnosis_date": "2025-08-22T17:56:54.370735",
+    "fev1_percent": 34.2,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 70
+  },
+  {
+    "patient_id": "560658BE",
+    "name": "James Martinez",
+    "sex": "M",
+    "age_at_diagnosis": 67,
+    "tnm_stage": "IIIA",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-07-31T17:56:54.370735",
+    "fev1_percent": 80.7,
+    "comorbidities": [
+      "Diabetes"
+    ],
+    "age": 67
+  },
+  {
+    "patient_id": "AFC55B5A",
+    "name": "Richard Davis",
+    "sex": "M",
+    "age_at_diagnosis": 76,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 3,
+    "laterality": "Left",
+    "diagnosis_date": "2025-10-11T17:56:54.370735",
+    "fev1_percent": 37.3,
+    "comorbidities": [],
+    "age": 76
+  },
+  {
+    "patient_id": "6FCB5E9B",
+    "name": "Patricia Martinez",
+    "sex": "F",
+    "age_at_diagnosis": 63,
+    "tnm_stage": "IIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-10-17T17:56:54.370735",
+    "fev1_percent": 46.0,
+    "comorbidities": [
+      "Diabetes"
+    ],
+    "age": 63
+  },
+  {
+    "patient_id": "32D76450",
+    "name": "Barbara Martinez",
+    "sex": "F",
+    "age_at_diagnosis": 79,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 3,
+    "laterality": "Right",
+    "diagnosis_date": "2025-12-09T17:56:54.371255",
+    "fev1_percent": 55.7,
+    "comorbidities": [
+      "Diabetes",
+      "COPD"
+    ],
+    "age": 79
+  },
+  {
+    "patient_id": "8A4BA919",
+    "name": "Richard Johnson",
+    "sex": "M",
+    "age_at_diagnosis": 51,
+    "tnm_stage": "IB",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Left",
+    "diagnosis_date": "2025-09-16T17:56:54.371312",
+    "fev1_percent": 99.0,
+    "comorbidities": [
+      "RenalDisease"
+    ],
+    "age": 51
+  },
+  {
+    "patient_id": "DECB1EBE",
+    "name": "William Brown",
+    "sex": "M",
+    "age_at_diagnosis": 58,
+    "tnm_stage": "IV",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 4,
+    "laterality": "Right",
+    "diagnosis_date": "2025-12-01T17:56:54.371312",
+    "fev1_percent": 30,
+    "comorbidities": [],
+    "age": 58
+  },
+  {
+    "patient_id": "5D65FCDB",
+    "name": "Michael Rodriguez",
+    "sex": "M",
+    "age_at_diagnosis": 72,
+    "tnm_stage": "IV",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-03-09T17:56:54.371312",
+    "fev1_percent": 87.4,
+    "comorbidities": [],
+    "age": 72
+  },
+  {
+    "patient_id": "6D76CE99",
+    "name": "Michael Garcia",
+    "sex": "M",
+    "age_at_diagnosis": 75,
+    "tnm_stage": "IV",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-06-08T17:56:54.371312",
+    "fev1_percent": 67.6,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 75
+  },
+  {
+    "patient_id": "82EAE06F",
+    "name": "Richard Johnson",
+    "sex": "M",
+    "age_at_diagnosis": 70,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-07-29T17:56:54.371312",
+    "fev1_percent": 89.1,
+    "comorbidities": [],
+    "age": 70
+  },
+  {
+    "patient_id": "8A4596FD",
+    "name": "James Jones",
+    "sex": "M",
+    "age_at_diagnosis": 81,
+    "tnm_stage": "IIB",
+    "histology_type": "NonSmallCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Left",
+    "diagnosis_date": "2025-02-25T17:56:54.371312",
+    "fev1_percent": 94.2,
+    "comorbidities": [],
+    "age": 81
+  },
+  {
+    "patient_id": "C2CC1DD2",
+    "name": "Richard Williams",
+    "sex": "M",
+    "age_at_diagnosis": 52,
+    "tnm_stage": "IV",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-03-15T17:56:54.371312",
+    "fev1_percent": 78.8,
+    "comorbidities": [
+      "RenalDisease"
+    ],
+    "age": 52
+  },
+  {
+    "patient_id": "B809ED51",
+    "name": "Barbara Davis",
+    "sex": "F",
+    "age_at_diagnosis": 68,
+    "tnm_stage": "IIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-09-23T17:56:54.371312",
+    "fev1_percent": 96.6,
+    "comorbidities": [],
+    "age": 68
+  },
+  {
+    "patient_id": "D2F0F6E4",
+    "name": "Charles Garcia",
+    "sex": "M",
+    "age_at_diagnosis": 80,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 3,
+    "laterality": "Right",
+    "diagnosis_date": "2025-11-01T17:56:54.371312",
+    "fev1_percent": 35.1,
+    "comorbidities": [],
+    "age": 80
+  },
+  {
+    "patient_id": "40CEA1CE",
+    "name": "Richard Brown",
+    "sex": "M",
+    "age_at_diagnosis": 85,
+    "tnm_stage": "IIB",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-01-30T17:56:54.371312",
+    "fev1_percent": 70.1,
+    "comorbidities": [
+      "COPD",
+      "CardiovascularDisease",
+      "Hypertension"
+    ],
+    "age": 85
+  },
+  {
+    "patient_id": "F1AB0B63",
+    "name": "Mary Rodriguez",
+    "sex": "F",
+    "age_at_diagnosis": 80,
+    "tnm_stage": "IIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-12-21T17:56:54.371312",
+    "fev1_percent": 77.4,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 80
+  },
+  {
+    "patient_id": "B527C242",
+    "name": "Jessica Rodriguez",
+    "sex": "F",
+    "age_at_diagnosis": 66,
+    "tnm_stage": "IIA",
+    "histology_type": "Carcinosarcoma",
+    "performance_status": 1,
+    "laterality": "Left",
+    "diagnosis_date": "2025-06-02T17:56:54.371312",
+    "fev1_percent": 78.7,
+    "comorbidities": [],
+    "age": 66
+  },
+  {
+    "patient_id": "489128D2",
+    "name": "Sarah Davis",
+    "sex": "F",
+    "age_at_diagnosis": 89,
+    "tnm_stage": "IV",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 3,
+    "laterality": "Left",
+    "diagnosis_date": "2025-02-25T17:56:54.371923",
+    "fev1_percent": 44.3,
+    "comorbidities": [
+      "Diabetes",
+      "Hypertension"
+    ],
+    "age": 89
+  },
+  {
+    "patient_id": "41A2A5FE",
+    "name": "Elizabeth Jones",
+    "sex": "F",
+    "age_at_diagnosis": 75,
+    "tnm_stage": "IIIA",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-07-29T17:56:54.371923",
+    "fev1_percent": 74.1,
+    "comorbidities": [
+      "Diabetes",
+      "Hypertension",
+      "COPD"
+    ],
+    "age": 75
+  },
+  {
+    "patient_id": "47F19EB0",
+    "name": "John Miller",
+    "sex": "M",
+    "age_at_diagnosis": 66,
+    "tnm_stage": "IV",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 3,
+    "laterality": "Left",
+    "diagnosis_date": "2025-07-09T17:56:54.371923",
+    "fev1_percent": 44.7,
+    "comorbidities": [
+      "Dementia",
+      "COPD"
+    ],
+    "age": 66
+  },
+  {
+    "patient_id": "D1E2DB9B",
+    "name": "Karen Miller",
+    "sex": "F",
+    "age_at_diagnosis": 60,
+    "tnm_stage": "IIIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-10-15T17:56:54.371923",
+    "fev1_percent": 43.0,
+    "comorbidities": [],
+    "age": 60
+  },
+  {
+    "patient_id": "3FF97E22",
+    "name": "Jennifer Williams",
+    "sex": "F",
+    "age_at_diagnosis": 54,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-04-17T17:56:54.371923",
+    "fev1_percent": 33.8,
+    "comorbidities": [
+      "RenalDisease"
+    ],
+    "age": 54
+  },
+  {
+    "patient_id": "40628F71",
+    "name": "Jessica Brown",
+    "sex": "F",
+    "age_at_diagnosis": 84,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-12-17T17:56:54.371923",
+    "fev1_percent": 70.6,
+    "comorbidities": [],
+    "age": 84
+  },
+  {
+    "patient_id": "E5BF4E39",
+    "name": "James Johnson",
+    "sex": "M",
+    "age_at_diagnosis": 73,
+    "tnm_stage": "IIIB",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-05-10T17:56:54.371923",
+    "fev1_percent": 56.2,
+    "comorbidities": [
+      "Hypertension"
+    ],
+    "age": 73
+  },
+  {
+    "patient_id": "BEE0F9E0",
+    "name": "William Garcia",
+    "sex": "M",
+    "age_at_diagnosis": 81,
+    "tnm_stage": "IIIA",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-04-24T17:56:54.371923",
+    "fev1_percent": 80.1,
+    "comorbidities": [],
+    "age": 81
+  },
+  {
+    "patient_id": "2782D434",
+    "name": "David Rodriguez",
+    "sex": "M",
+    "age_at_diagnosis": 60,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-05-26T17:56:54.371923",
+    "fev1_percent": 87.2,
+    "comorbidities": [
+      "COPD",
+      "Diabetes",
+      "RenalDisease"
+    ],
+    "age": 60
+  },
+  {
+    "patient_id": "89D7C75D",
+    "name": "Sarah Davis",
+    "sex": "F",
+    "age_at_diagnosis": 75,
+    "tnm_stage": "IIA",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-04-07T17:56:54.372430",
+    "fev1_percent": 69.7,
+    "comorbidities": [
+      "CardiovascularDisease"
+    ],
+    "age": 75
+  },
+  {
+    "patient_id": "E537E668",
+    "name": "William Brown",
+    "sex": "M",
+    "age_at_diagnosis": 62,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-12-05T17:56:54.372822",
+    "fev1_percent": 58.4,
+    "comorbidities": [
+      "Hypertension",
+      "CardiovascularDisease",
+      "RenalDisease"
+    ],
+    "age": 62
+  },
+  {
+    "patient_id": "DEBD905D",
+    "name": "David Martinez",
+    "sex": "M",
+    "age_at_diagnosis": 56,
+    "tnm_stage": "IB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 0,
+    "laterality": "Right",
+    "diagnosis_date": "2025-07-30T17:56:54.372822",
+    "fev1_percent": 53.1,
+    "comorbidities": [
+      "COPD",
+      "RenalDisease",
+      "Diabetes"
+    ],
+    "age": 56
+  },
+  {
+    "patient_id": "6C904B74",
+    "name": "Michael Williams",
+    "sex": "M",
+    "age_at_diagnosis": 89,
+    "tnm_stage": "IIA",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-04-14T17:56:54.372822",
+    "fev1_percent": 74.9,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "COPD",
+      "RenalDisease"
+    ],
+    "age": 89
+  },
+  {
+    "patient_id": "5E808A4D",
+    "name": "Charles Garcia",
+    "sex": "M",
+    "age_at_diagnosis": 95,
+    "tnm_stage": "IIIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-10-24T17:56:54.373435",
+    "fev1_percent": 60.7,
+    "comorbidities": [
+      "RenalDisease"
+    ],
+    "age": 95
+  },
+  {
+    "patient_id": "AB697D41",
+    "name": "Karen Johnson",
+    "sex": "F",
+    "age_at_diagnosis": 86,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-12-25T17:56:54.373435",
+    "fev1_percent": 38.9,
+    "comorbidities": [
+      "Diabetes",
+      "Hypertension"
+    ],
+    "age": 86
+  },
+  {
+    "patient_id": "C3330C6B",
+    "name": "Susan Williams",
+    "sex": "F",
+    "age_at_diagnosis": 75,
+    "tnm_stage": "IIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Left",
+    "diagnosis_date": "2025-07-30T17:56:54.373435",
+    "fev1_percent": 103.8,
+    "comorbidities": [
+      "CardiovascularDisease"
+    ],
+    "age": 75
+  },
+  {
+    "patient_id": "41F94EE2",
+    "name": "Charles Miller",
+    "sex": "M",
+    "age_at_diagnosis": 67,
+    "tnm_stage": "IIIB",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-09-06T17:56:54.373435",
+    "fev1_percent": 63.1,
+    "comorbidities": [],
+    "age": 67
+  },
+  {
+    "patient_id": "D62F1D4A",
+    "name": "Michael Garcia",
+    "sex": "M",
+    "age_at_diagnosis": 71,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-10-06T17:56:54.373435",
+    "fev1_percent": 30,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "COPD"
+    ],
+    "age": 71
+  },
+  {
+    "patient_id": "8BD1A179",
+    "name": "James Garcia",
+    "sex": "M",
+    "age_at_diagnosis": 72,
+    "tnm_stage": "IA",
+    "histology_type": "Carcinosarcoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-06-08T17:56:54.373435",
+    "fev1_percent": 85.9,
+    "comorbidities": [
+      "RenalDisease",
+      "COPD"
+    ],
+    "age": 72
+  },
+  {
+    "patient_id": "3D485926",
+    "name": "Jessica Smith",
+    "sex": "F",
+    "age_at_diagnosis": 65,
+    "tnm_stage": "IIIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-08-24T17:56:54.373972",
+    "fev1_percent": 64.9,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "Dementia"
+    ],
+    "age": 65
+  },
+  {
+    "patient_id": "BA1CDEBC",
+    "name": "James Williams",
+    "sex": "M",
+    "age_at_diagnosis": 70,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-02-09T17:56:54.374088",
+    "fev1_percent": 53.4,
+    "comorbidities": [
+      "CardiovascularDisease"
+    ],
+    "age": 70
+  },
+  {
+    "patient_id": "370C2498",
+    "name": "Thomas Brown",
+    "sex": "M",
+    "age_at_diagnosis": 59,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 3,
+    "laterality": "Right",
+    "diagnosis_date": "2025-08-06T17:56:54.374088",
+    "fev1_percent": 85.7,
+    "comorbidities": [
+      "Diabetes"
+    ],
+    "age": 59
+  },
+  {
+    "patient_id": "8745CF14",
+    "name": "Richard Williams",
+    "sex": "M",
+    "age_at_diagnosis": 66,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-06-24T17:56:54.374088",
+    "fev1_percent": 55.9,
+    "comorbidities": [],
+    "age": 66
+  },
+  {
+    "patient_id": "CFDE9159",
+    "name": "Susan Miller",
+    "sex": "F",
+    "age_at_diagnosis": 75,
+    "tnm_stage": "IB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-12-14T17:56:54.374088",
+    "fev1_percent": 67.2,
+    "comorbidities": [
+      "RenalDisease"
+    ],
+    "age": 75
+  },
+  {
+    "patient_id": "5C771685",
+    "name": "Patricia Martinez",
+    "sex": "F",
+    "age_at_diagnosis": 52,
+    "tnm_stage": "IIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Left",
+    "diagnosis_date": "2025-11-11T17:56:54.374088",
+    "fev1_percent": 79.9,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "COPD"
+    ],
+    "age": 52
+  },
+  {
+    "patient_id": "8FE189D6",
+    "name": "Elizabeth Davis",
+    "sex": "F",
+    "age_at_diagnosis": 78,
+    "tnm_stage": "IIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-10-21T17:56:54.374088",
+    "fev1_percent": 76.8,
+    "comorbidities": [
+      "Hypertension",
+      "Dementia"
+    ],
+    "age": 78
+  },
+  {
+    "patient_id": "6F85B792",
+    "name": "Sarah Davis",
+    "sex": "F",
+    "age_at_diagnosis": 56,
+    "tnm_stage": "IA",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-10-12T17:56:54.374088",
+    "fev1_percent": 80.3,
+    "comorbidities": [
+      "Diabetes"
+    ],
+    "age": 56
+  },
+  {
+    "patient_id": "F3AFE606",
+    "name": "Karen Miller",
+    "sex": "F",
+    "age_at_diagnosis": 86,
+    "tnm_stage": "IIB",
+    "histology_type": "NonSmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-07-29T17:56:54.374088",
+    "fev1_percent": 86.7,
+    "comorbidities": [
+      "Diabetes",
+      "COPD",
+      "RenalDisease"
+    ],
+    "age": 86
+  },
+  {
+    "patient_id": "685C2B2F",
+    "name": "Barbara Davis",
+    "sex": "F",
+    "age_at_diagnosis": 74,
+    "tnm_stage": "IIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-02-02T17:56:54.374088",
+    "fev1_percent": 87.3,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 74
+  },
+  {
+    "patient_id": "AE3B9718",
+    "name": "Robert Martinez",
+    "sex": "M",
+    "age_at_diagnosis": 58,
+    "tnm_stage": "IIIB",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-08-26T17:56:54.374088",
+    "fev1_percent": 39.4,
+    "comorbidities": [
+      "CardiovascularDisease"
+    ],
+    "age": 58
+  },
+  {
+    "patient_id": "87E98778",
+    "name": "Richard Johnson",
+    "sex": "M",
+    "age_at_diagnosis": 69,
+    "tnm_stage": "IIIB",
+    "histology_type": "NonSmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-05-06T17:56:54.374088",
+    "fev1_percent": 65.7,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 69
+  },
+  {
+    "patient_id": "4AE900BE",
+    "name": "William Rodriguez",
+    "sex": "M",
+    "age_at_diagnosis": 63,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-03-12T17:56:54.374088",
+    "fev1_percent": 55.1,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 63
+  },
+  {
+    "patient_id": "C18022A4",
+    "name": "Sarah Williams",
+    "sex": "F",
+    "age_at_diagnosis": 81,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 4,
+    "laterality": "Right",
+    "diagnosis_date": "2025-12-03T17:56:54.374088",
+    "fev1_percent": 62.8,
+    "comorbidities": [
+      "Dementia",
+      "COPD"
+    ],
+    "age": 81
+  },
+  {
+    "patient_id": "5C3A84DD",
+    "name": "Richard Miller",
+    "sex": "M",
+    "age_at_diagnosis": 70,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-02-12T17:56:54.374088",
+    "fev1_percent": 30,
+    "comorbidities": [
+      "RenalDisease"
+    ],
+    "age": 70
+  },
+  {
+    "patient_id": "F0D74449",
+    "name": "Charles Williams",
+    "sex": "M",
+    "age_at_diagnosis": 70,
+    "tnm_stage": "IIIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Left",
+    "diagnosis_date": "2025-06-19T17:56:54.374088",
+    "fev1_percent": 46.4,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 70
+  },
+  {
+    "patient_id": "E077DC48",
+    "name": "John Rodriguez",
+    "sex": "M",
+    "age_at_diagnosis": 64,
+    "tnm_stage": "IB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-09-20T17:56:54.374691",
+    "fev1_percent": 76.1,
+    "comorbidities": [
+      "COPD",
+      "RenalDisease"
+    ],
+    "age": 64
+  },
+  {
+    "patient_id": "16CD9A36",
+    "name": "Linda Rodriguez",
+    "sex": "F",
+    "age_at_diagnosis": 51,
+    "tnm_stage": "IA",
+    "histology_type": "Carcinosarcoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-06-16T17:56:54.374691",
+    "fev1_percent": 102.3,
+    "comorbidities": [
+      "Hypertension",
+      "RenalDisease"
+    ],
+    "age": 51
+  },
+  {
+    "patient_id": "7BDDB38B",
+    "name": "David Johnson",
+    "sex": "M",
+    "age_at_diagnosis": 74,
+    "tnm_stage": "IIA",
+    "histology_type": "Carcinosarcoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-12-10T17:56:54.374691",
+    "fev1_percent": 92.6,
+    "comorbidities": [],
+    "age": 74
+  },
+  {
+    "patient_id": "DC4811E2",
+    "name": "William Brown",
+    "sex": "M",
+    "age_at_diagnosis": 74,
+    "tnm_stage": "IV",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-05-06T17:56:54.374691",
+    "fev1_percent": 45.4,
+    "comorbidities": [
+      "Dementia",
+      "RenalDisease"
+    ],
+    "age": 74
+  },
+  {
+    "patient_id": "00833204",
+    "name": "Karen Jones",
+    "sex": "F",
+    "age_at_diagnosis": 76,
+    "tnm_stage": "IIIA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-08-05T17:56:54.374691",
+    "fev1_percent": 57.1,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "Dementia"
+    ],
+    "age": 76
+  },
+  {
+    "patient_id": "CA61AF41",
+    "name": "Thomas Brown",
+    "sex": "M",
+    "age_at_diagnosis": 62,
+    "tnm_stage": "IV",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-06-29T17:56:54.374691",
+    "fev1_percent": 71.7,
+    "comorbidities": [],
+    "age": 62
+  },
+  {
+    "patient_id": "6F2DBB70",
+    "name": "William Rodriguez",
+    "sex": "M",
+    "age_at_diagnosis": 57,
+    "tnm_stage": "IIIB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 3,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-03-02T17:56:54.374691",
+    "fev1_percent": 54.4,
+    "comorbidities": [],
+    "age": 57
+  },
+  {
+    "patient_id": "29DEEA94",
+    "name": "Mary Brown",
+    "sex": "F",
+    "age_at_diagnosis": 66,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 3,
+    "laterality": "Right",
+    "diagnosis_date": "2025-03-17T17:56:54.374691",
+    "fev1_percent": 61.1,
+    "comorbidities": [
+      "Dementia",
+      "Hypertension"
+    ],
+    "age": 66
+  },
+  {
+    "patient_id": "FB0125E2",
+    "name": "Linda Brown",
+    "sex": "F",
+    "age_at_diagnosis": 67,
+    "tnm_stage": "IA",
+    "histology_type": "NonSmallCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Left",
+    "diagnosis_date": "2025-04-12T17:56:54.374691",
+    "fev1_percent": 75.7,
+    "comorbidities": [],
+    "age": 67
+  },
+  {
+    "patient_id": "DE53EFF2",
+    "name": "David Davis",
+    "sex": "M",
+    "age_at_diagnosis": 72,
+    "tnm_stage": "IB",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Left",
+    "diagnosis_date": "2025-11-03T17:56:54.374691",
+    "fev1_percent": 89.4,
+    "comorbidities": [],
+    "age": 72
+  },
+  {
+    "patient_id": "44F1C982",
+    "name": "Richard Brown",
+    "sex": "M",
+    "age_at_diagnosis": 63,
+    "tnm_stage": "IIIB",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Left",
+    "diagnosis_date": "2025-04-08T17:56:54.374691",
+    "fev1_percent": 97.1,
+    "comorbidities": [],
+    "age": 63
+  },
+  {
+    "patient_id": "98F10D5D",
+    "name": "Richard Williams",
+    "sex": "M",
+    "age_at_diagnosis": 63,
+    "tnm_stage": "IIB",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-04-13T17:56:54.374691",
+    "fev1_percent": 73.0,
+    "comorbidities": [],
+    "age": 63
+  },
+  {
+    "patient_id": "666B8511",
+    "name": "Jennifer Rodriguez",
+    "sex": "F",
+    "age_at_diagnosis": 74,
+    "tnm_stage": "IV",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 3,
+    "laterality": "Right",
+    "diagnosis_date": "2025-02-22T17:56:54.374691",
+    "fev1_percent": 60.0,
+    "comorbidities": [
+      "Dementia",
+      "RenalDisease"
+    ],
+    "age": 74
+  },
+  {
+    "patient_id": "078D223A",
+    "name": "Susan Johnson",
+    "sex": "F",
+    "age_at_diagnosis": 61,
+    "tnm_stage": "IA",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-02-22T17:56:54.374691",
+    "fev1_percent": 79.9,
+    "comorbidities": [
+      "Hypertension"
+    ],
+    "age": 61
+  },
+  {
+    "patient_id": "92DBA765",
+    "name": "Barbara Martinez",
+    "sex": "F",
+    "age_at_diagnosis": 74,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-03-03T17:56:54.374691",
+    "fev1_percent": 74.7,
+    "comorbidities": [],
+    "age": 74
+  },
+  {
+    "patient_id": "34C306E7",
+    "name": "John Miller",
+    "sex": "M",
+    "age_at_diagnosis": 73,
+    "tnm_stage": "IB",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 0,
+    "laterality": "Right",
+    "diagnosis_date": "2025-06-26T17:56:54.374691",
+    "fev1_percent": 78.0,
+    "comorbidities": [
+      "Diabetes"
+    ],
+    "age": 73
+  },
+  {
+    "patient_id": "AAF57B00",
+    "name": "David Martinez",
+    "sex": "M",
+    "age_at_diagnosis": 77,
+    "tnm_stage": "IIIA",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-05-19T17:56:54.375276",
+    "fev1_percent": 97.8,
+    "comorbidities": [],
+    "age": 77
+  },
+  {
+    "patient_id": "E3DA0A79",
+    "name": "Barbara Miller",
+    "sex": "F",
+    "age_at_diagnosis": 60,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-11-10T17:56:54.375276",
+    "fev1_percent": 79.9,
+    "comorbidities": [
+      "COPD",
+      "RenalDisease"
+    ],
+    "age": 60
+  },
+  {
+    "patient_id": "5D23175D",
+    "name": "Sarah Garcia",
+    "sex": "F",
+    "age_at_diagnosis": 68,
+    "tnm_stage": "IIA",
+    "histology_type": "NonSmallCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-11-14T17:56:54.375276",
+    "fev1_percent": 73.9,
+    "comorbidities": [
+      "Hypertension"
+    ],
+    "age": 68
+  },
+  {
+    "patient_id": "246004E4",
+    "name": "Karen Williams",
+    "sex": "F",
+    "age_at_diagnosis": 61,
+    "tnm_stage": "IV",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-08-15T17:56:54.375276",
+    "fev1_percent": 30,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "Diabetes"
+    ],
+    "age": 61
+  },
+  {
+    "patient_id": "EEC12918",
+    "name": "Linda Brown",
+    "sex": "F",
+    "age_at_diagnosis": 83,
+    "tnm_stage": "IV",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Bilateral",
+    "diagnosis_date": "2025-07-08T17:56:54.375276",
+    "fev1_percent": 39.8,
+    "comorbidities": [],
+    "age": 83
+  },
+  {
+    "patient_id": "BCBA2804",
+    "name": "Charles Johnson",
+    "sex": "M",
+    "age_at_diagnosis": 70,
+    "tnm_stage": "IV",
+    "histology_type": "SquamousCellCarcinoma",
+    "performance_status": 2,
+    "laterality": "Right",
+    "diagnosis_date": "2025-09-05T17:56:54.375276",
+    "fev1_percent": 71.7,
+    "comorbidities": [
+      "COPD",
+      "Diabetes",
+      "Hypertension"
+    ],
+    "age": 70
+  },
+  {
+    "patient_id": "6B844585",
+    "name": "Jessica Miller",
+    "sex": "F",
+    "age_at_diagnosis": 65,
+    "tnm_stage": "IB",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 1,
+    "laterality": "Right",
+    "diagnosis_date": "2025-05-24T17:56:54.375276",
+    "fev1_percent": 88.0,
+    "comorbidities": [
+      "Dementia"
+    ],
+    "age": 65
+  },
+  {
+    "patient_id": "F9C0D9D2",
+    "name": "Joseph Williams",
+    "sex": "M",
+    "age_at_diagnosis": 71,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 3,
+    "laterality": "Left",
+    "diagnosis_date": "2025-02-10T17:56:54.375879",
+    "fev1_percent": 59.1,
+    "comorbidities": [
+      "CardiovascularDisease",
+      "COPD"
+    ],
+    "age": 71
+  },
+  {
+    "patient_id": "19D97C69",
+    "name": "Robert Johnson",
+    "sex": "M",
+    "age_at_diagnosis": 54,
+    "tnm_stage": "IA",
+    "histology_type": "SmallCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Right",
+    "diagnosis_date": "2025-10-22T17:56:54.375879",
+    "fev1_percent": 86.8,
+    "comorbidities": [
+      "Hypertension",
+      "RenalDisease"
+    ],
+    "age": 54
+  },
+  {
+    "patient_id": "263EA25B",
+    "name": "Jessica Miller",
+    "sex": "F",
+    "age_at_diagnosis": 61,
+    "tnm_stage": "IA",
+    "histology_type": "LargeCellCarcinoma",
+    "performance_status": 0,
+    "laterality": "Left",
+    "diagnosis_date": "2025-10-20T17:56:54.375879",
+    "fev1_percent": 102.9,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 61
+  },
+  {
+    "patient_id": "562F5EB2",
+    "name": "David Davis",
+    "sex": "M",
+    "age_at_diagnosis": 68,
+    "tnm_stage": "IV",
+    "histology_type": "Adenocarcinoma",
+    "performance_status": 3,
+    "laterality": "Right",
+    "diagnosis_date": "2025-11-21T17:56:54.375879",
+    "fev1_percent": 39.1,
+    "comorbidities": [
+      "COPD"
+    ],
+    "age": 68
+  }
+]

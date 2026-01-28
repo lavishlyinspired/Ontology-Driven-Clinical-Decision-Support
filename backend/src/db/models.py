@@ -292,10 +292,10 @@ class WriteReceipt(BaseModel):
 class SimilarPatient(BaseModel):
     """Similar patient for cohort comparison"""
     patient_id: str
-    name: str
-    similarity_score: float = Field(ge=0.0, le=1.0)
-    tnm_stage: str
-    histology_type: str
+    name: str = "Unknown"
+    similarity_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    tnm_stage: str = "Unknown"
+    histology_type: str = "Unknown"
     treatment_received: Optional[str] = None
     outcome: Optional[str] = None
     survival_days: Optional[int] = None

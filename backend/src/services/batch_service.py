@@ -119,7 +119,9 @@ class BatchProcessor:
     def register_task_handler(self, task_type: str, handler: Callable):
         """Register a handler for a specific task type."""
         self.task_handlers[task_type] = handler
-        print(f"📝 Registered handler for task type: {task_type}")
+        # Avoid non-ASCII characters here to prevent encoding issues
+        # in environments that don't support UTF-8 (e.g. cp1252 consoles).
+        print(f"Registered handler for task type: {task_type}")
     
     def create_task(
         self,

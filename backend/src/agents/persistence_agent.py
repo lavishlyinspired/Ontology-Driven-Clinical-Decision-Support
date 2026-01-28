@@ -94,25 +94,40 @@ class PersistenceAgent:
             return None
 
     def execute(
-        self, 
-        patient: PatientFactWithCodes,
-        classification: ClassificationResult,
-        agent_chain: List[str],
+        self,
+        patient,
+        classification=None,
+        agent_chain: List[str] = None,
         llm_model: str = "gpt-4"
     ) -> WriteReceipt:
         """
         Execute persistence: save all results to Neo4j with full audit trail.
-        
+
         Args:
-            patient: Patient data with SNOMED codes
-            classification: Classification results with recommendations
-            agent_chain: List of agents that processed this data
+            patient: Patient data with SNOMED codes (PatientFactWithCodes or dict)
+            classification: Classification results with recommendations (optional)
+            agent_chain: List of agents that processed this data (optional)
             llm_model: LLM model used for inference
-            
+
         Returns:
             WriteReceipt confirming all writes
         """
-        logger.info(f"[{self.name}] Persisting results for patient {patient.patient_id}...")
+        # Handle dict input from dynamic orchestrator
+        if isinstance(patient, dict):
+            patient_id = patient.get('patient_id', 'unknown')
+            # Extract nested data if available
+            if classification is None:
+                classification = patient.get('classification')
+            if agent_chain is None:
+                agent_chain = patient.get('agent_chain', [])
+        else:
+            patient_id = patient.patient_id
+
+        # Set defaults
+        if agent_chain is None:
+            agent_chain = []
+
+        logger.info(f"[{self.name}] Persisting results for patient {patient_id}...")
 
         timestamp = datetime.utcnow().isoformat()
         entities_written = []
@@ -120,11 +135,13 @@ class PersistenceAgent:
 
         try:
             # Step 0: Generate patient embedding for semantic search
-            embedding = self._generate_patient_embedding(patient, classification)
+            embedding = None
+            if not isinstance(patient, dict) and classification:
+                embedding = self._generate_patient_embedding(patient, classification)
             
             # Step 1: Save patient facts (with optional embedding)
             patient_node_id = self.write_tools.save_patient_facts(patient, embedding=embedding)
-            entities_written.append(f"Patient:{patient.patient_id}")
+            entities_written.append(f"Patient:{patient_id}")
             logger.info(f"[{self.name}] ✓ Saved patient facts")
 
             # Step 2: Create inference record
@@ -143,7 +160,7 @@ class PersistenceAgent:
             # Step 3: Save treatment recommendations
             for rec in classification.recommendations:
                 rec_id = self.write_tools.save_treatment_recommendation(
-                    patient_id=patient.patient_id,
+                    patient_id=patient_id,
                     inference_id=inference_id,
                     recommendation=rec
                 )
@@ -154,7 +171,7 @@ class PersistenceAgent:
 
             # Step 4: Mark previous inferences as superseded
             obsolete_count = self.write_tools.mark_inference_obsolete(
-                patient_id=patient.patient_id,
+                patient_id=patient_id,
                 current_inference_id=inference_id
             )
             if obsolete_count > 0:

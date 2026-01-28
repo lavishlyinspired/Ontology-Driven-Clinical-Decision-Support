@@ -65,9 +65,14 @@ class RAGService:
     
     def __init__(self):
         """Initialize RAG service."""
-        from ..db.vector_store import vector_store
+        try:
+            from ..db.vector_store import vector_store, get_vector_store
+            self.vector_store = vector_store if vector_store else get_vector_store()
+        except ImportError as e:
+            import logging
+            logging.warning(f"Could not import vector_store: {e}")
+            self.vector_store = None
         
-        self.vector_store = vector_store
         self._embedding_model = None
         self._guideline_chunks: List[GuidelineChunk] = []
         self._case_database: List[Dict[str, Any]] = []

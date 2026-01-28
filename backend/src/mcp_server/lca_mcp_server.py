@@ -96,8 +96,11 @@ class LCAMCPServer:
         self.workflow = None
         self.neo4j_tools = None
 
-        # Initialize components lazily
+        # Initialize components lazily (don't load heavy resources at startup)
         self._components_initialized = False
+        
+        # Log initialization without loading
+        logger.info("MCP Server initialized (components will load on first use)")
 
         # Register all handlers
         self._register_list_tools()
@@ -1478,7 +1481,7 @@ class LCAMCPServer:
         explanation = ExplanationAgent()
         mdt_summary = explanation.execute(patient_with_codes, resolved)
 
-        return {
+        result = {
             "status": "success",
             "patient_id": mdt_summary.patient_id,
             "generated_at": mdt_summary.generated_at.isoformat(),
@@ -1494,73 +1497,51 @@ class LCAMCPServer:
             "disclaimer": mdt_summary.disclaimer
         }
 
-                return [TextContent(
-                    type="text",
-                    text=json.dumps(result, indent=2, default=str)
-                )]
+        return result
 
-            except Exception as e:
-                return [TextContent(
-                    type="text",
-                    text=json.dumps({"status": "error", "message": str(e)}, indent=2)
-                )]
+    # Tool 18: Validate Patient Against Schema
+    async def _handle_validate_patient_schema(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate patient data against the LUCADA schema without processing."""
+        from src.agents.ingestion_agent import IngestionAgent
+        try:
+            patient_data = args.get("patient_data", args)
+            
+            agent = IngestionAgent()
+            
+            # Check required fields
+            errors = []
+            required = ["tnm_stage", "histology_type"]
+            
+            for field in required:
+                if field not in patient_data or not patient_data[field]:
+                    errors.append(f"Missing required field: {field}")
+            
+            # Validate TNM stage
+            valid_stages = ["I", "IA", "IB", "II", "IIA", "IIB", "III", "IIIA", "IIIB", "IIIC", "IV", "IVA", "IVB"]
+            stage = patient_data.get("tnm_stage", "")
+            normalized_stage = agent.normalize_tnm(stage)
+            if normalized_stage not in valid_stages:
+                errors.append(f"Invalid TNM stage: {stage}")
+            
+            # Validate performance status
+            ps = patient_data.get("performance_status")
+            if ps is not None:
+                try:
+                    ps_int = int(ps)
+                    if ps_int < 0 or ps_int > 4:
+                        errors.append(f"Performance status must be 0-4, got: {ps}")
+                except ValueError:
+                    errors.append(f"Invalid performance status: {ps}")
+            
+            return {
+                "status": "valid" if not errors else "invalid",
+                "errors": errors,
+                "normalized_stage": normalized_stage if normalized_stage else None,
+                "fields_present": list(patient_data.keys())
+            }
 
-        # Tool 18: Validate Patient Against Schema
-        @self.server.call_tool()
-        async def validate_patient_schema(arguments: Dict[str, Any]) -> List[TextContent]:
-            """
-            Validate patient data against the LUCADA schema without processing.
-
-            Args:
-                patient_data: Patient data to validate
-            """
-            try:
-                patient_data = arguments.get("patient_data", arguments)
-                
-                agent = IngestionAgent()
-                
-                # Check required fields
-                errors = []
-                required = ["tnm_stage", "histology_type"]
-                
-                for field in required:
-                    if field not in patient_data or not patient_data[field]:
-                        errors.append(f"Missing required field: {field}")
-                
-                # Validate TNM stage
-                valid_stages = ["I", "IA", "IB", "II", "IIA", "IIB", "III", "IIIA", "IIIB", "IIIC", "IV", "IVA", "IVB"]
-                stage = patient_data.get("tnm_stage", "")
-                normalized_stage = agent.normalize_tnm(stage)
-                if normalized_stage not in valid_stages:
-                    errors.append(f"Invalid TNM stage: {stage}")
-                
-                # Validate performance status
-                ps = patient_data.get("performance_status")
-                if ps is not None:
-                    try:
-                        ps_int = int(ps)
-                        if ps_int < 0 or ps_int > 4:
-                            errors.append(f"Performance status must be 0-4, got: {ps}")
-                    except ValueError:
-                        errors.append(f"Invalid performance status: {ps}")
-                
-                result = {
-                    "status": "valid" if not errors else "invalid",
-                    "errors": errors,
-                    "normalized_stage": normalized_stage if normalized_stage else None,
-                    "fields_present": list(patient_data.keys())
-                }
-
-                return [TextContent(
-                    type="text",
-                    text=json.dumps(result, indent=2)
-                )]
-
-            except Exception as e:
-                return [TextContent(
-                    type="text",
-                    text=json.dumps({"status": "error", "message": str(e)}, indent=2)
-                )]
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
         # ========================================
         # REGISTER 2025 ENHANCED TOOLS

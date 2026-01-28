@@ -55,15 +55,24 @@ class NSCLCAgent:
         Generate NSCLC-specific treatment proposal
 
         Args:
-            patient: PatientFactWithCodes
+            patient: PatientFactWithCodes or dict
             biomarker_profile: Optional biomarker data
 
         Returns:
             NSCLCProposal with treatment recommendation
         """
+        # Handle patient as dict or object
+        if isinstance(patient, dict):
+            histology_type = patient.get('histology_type', 'NSCLC_NOS')
+            tnm_stage = patient.get('tnm_stage', 'IV')
+            performance_status = patient.get('performance_status', 1)
+        else:
+            histology_type = getattr(patient, 'histology_type', 'NSCLC_NOS')
+            tnm_stage = getattr(patient, 'tnm_stage', 'IV')
+            performance_status = getattr(patient, 'performance_status', 1)
 
         # Determine NSCLC subtype
-        subtype = self._determine_subtype(patient.histology_type)
+        subtype = self._determine_subtype(histology_type)
 
         # Check for biomarker-driven pathways first
         if biomarker_profile and self._has_actionable_biomarkers(biomarker_profile):
@@ -80,8 +89,8 @@ class NSCLCAgent:
             )
 
         # Stage-based recommendations for NSCLC without driver mutations
-        stage = patient.tnm_stage
-        ps = patient.performance_status
+        stage = tnm_stage
+        ps = performance_status
 
         if stage in ["IA", "IB"]:
             return self._early_stage_nsclc(patient, subtype)
@@ -123,7 +132,8 @@ class NSCLCAgent:
 
     def _early_stage_nsclc(self, patient, subtype: NSCLCSubtype) -> NSCLCProposal:
         """Stage I NSCLC recommendations"""
-        if patient.performance_status <= 1:
+        ps = patient.get('performance_status', 1) if isinstance(patient, dict) else getattr(patient, 'performance_status', 1)
+        if ps <= 1:
             return NSCLCProposal(
                 treatment="Surgical resection (lobectomy preferred)",
                 confidence=0.90,
@@ -158,7 +168,8 @@ class NSCLCAgent:
 
     def _locally_advanced_unresectable(self, patient, subtype: NSCLCSubtype) -> NSCLCProposal:
         """Stage III NSCLC recommendations"""
-        if patient.performance_status <= 1:
+        ps = patient.get('performance_status', 1) if isinstance(patient, dict) else getattr(patient, 'performance_status', 1)
+        if ps <= 1:
             return NSCLCProposal(
                 treatment="Concurrent chemoradiotherapy followed by durvalumab",
                 confidence=0.90,

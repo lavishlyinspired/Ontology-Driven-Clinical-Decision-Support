@@ -29,7 +29,8 @@ from .ingestion_agent import IngestionAgent
 from .semantic_mapping_agent import SemanticMappingAgent
 from .classification_agent import ClassificationAgent
 from .conflict_resolution_agent import ConflictResolutionAgent
-from .persistence_agent import PersistenceAgent
+# Lazy import to avoid loading sentence_transformers/torch
+# from .persistence_agent import PersistenceAgent
 from .explanation_agent import ExplanationAgent
 
 # Model imports
@@ -123,8 +124,13 @@ class LCAWorkflow:
                 self.write_tools = Neo4jWriteTools(neo4j_uri, neo4j_user, neo4j_password)
                 
                 if self.write_tools.is_available:
-                    self.persistence_agent = PersistenceAgent(self.write_tools)
-                    logger.info("✅ Neo4j tools initialized successfully for persistence")
+                    # Lazy import PersistenceAgent to avoid loading sentence_transformers
+                    try:
+                        from .persistence_agent import PersistenceAgent
+                        self.persistence_agent = PersistenceAgent(self.write_tools)
+                        logger.info("✅ Neo4j tools initialized successfully for persistence")
+                    except ImportError as e:
+                        logger.warning(f"⚠ PersistenceAgent not available: {e}")
                 else:
                     logger.warning("⚠ Neo4j not available - persistence will be skipped")
             except Exception as e:

@@ -438,21 +438,34 @@ class ComorbidityAgent:
     # UTILITIES
     # ========================================
 
-    def _extract_comorbidities(self, patient: PatientFactWithCodes) -> ComorbidityProfile:
-        """Extract comorbidity data from patient record"""
+    def _extract_comorbidities(self, patient) -> ComorbidityProfile:
+        """Extract comorbidity data from patient record (handles dict or object)"""
 
-        comorbidities = patient.comorbidities if hasattr(patient, 'comorbidities') else []
+        # Handle patient as dict or object
+        if isinstance(patient, dict):
+            comorbidities = patient.get('comorbidities', [])
+            fev1 = patient.get('fev1_percent') or patient.get('fev1')
+            egfr_val = patient.get('egfr') or patient.get('egfr_renal')
+        else:
+            comorbidities = getattr(patient, 'comorbidities', []) or []
+            fev1 = getattr(patient, 'fev1_percent', None)
+            egfr_val = getattr(patient, 'egfr', None)
+
+        # Normalize comorbidity strings to lowercase
+        comorbidities_lower = [c.lower() for c in comorbidities] if comorbidities else []
 
         return ComorbidityProfile(
-            heart_disease="heart_disease" in comorbidities,
-            copd="copd" in comorbidities,
-            diabetes="diabetes" in comorbidities,
-            chronic_kidney_disease="ckd" in comorbidities,
-            hepatic_impairment="hepatic_impairment" in comorbidities,
-            autoimmune_disease="autoimmune" in comorbidities,
-            interstitial_lung_disease="ild" in comorbidities,
-            fev1_percent=patient.fev1_percent if hasattr(patient, 'fev1_percent') else None,
-            egfr=getattr(patient, 'egfr', None)
+            heart_disease=any("heart" in c for c in comorbidities_lower),
+            copd=any("copd" in c for c in comorbidities_lower),
+            diabetes=any("diabetes" in c for c in comorbidities_lower),
+            chronic_kidney_disease=any("ckd" in c or "kidney" in c for c in comorbidities_lower),
+            hepatic_impairment=any("hepatic" in c or "liver" in c for c in comorbidities_lower),
+            autoimmune_disease=any("autoimmune" in c for c in comorbidities_lower),
+            interstitial_lung_disease=any("ild" in c or "interstitial" in c for c in comorbidities_lower),
+            hypertension=any("hypertension" in c for c in comorbidities_lower),
+            arrhythmia=any("arrhythmia" in c or "fibrillation" in c for c in comorbidities_lower),
+            fev1_percent=fev1,
+            egfr=egfr_val
         )
 
     def _calculate_risk_score(

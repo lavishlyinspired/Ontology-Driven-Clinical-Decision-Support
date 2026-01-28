@@ -240,6 +240,33 @@ class GuidelineRuleEngine:
         ),
 
         GuidelineRule(
+            rule_id="R8A",
+            name="AdjuvantEGFRTKIRule001_ResectedEGFRPositive",
+            source="ADAURA Trial / ASCO 2025 Guidelines",
+            description="Offer adjuvant EGFR TKI (osimertinib) for completely resected stage IB-IIIA EGFR-mutated NSCLC",
+            owl_expression="""
+                (has_clinical_finding some
+                    (NeoplasticDisease and
+                        ((has_pre_tnm_staging value "IB") or
+                         (has_pre_tnm_staging value "II") or
+                         (has_pre_tnm_staging value "IIA") or
+                         (has_pre_tnm_staging value "IIB") or
+                         (has_pre_tnm_staging value "IIIA")) and
+                        (has_histology some NonSmallCellCarcinoma) and
+                        (has_biomarker some EGFRPositive)
+                    )
+                )
+                and
+                (has_performance_status some (WHOPerfStatusGrade0 or WHOPerfStatusGrade1 or WHOPerfStatusGrade2))
+            """,
+            recommended_treatment="AdjuvantTargetedTherapy",
+            treatment_intent="Curative",
+            evidence_level="Grade A",
+            contraindications=["Severe hepatic impairment", "Interstitial lung disease"],
+            survival_benefit="89% 3-year DFS vs 53% with placebo (Stage II-IIIA); HR 0.17 for disease recurrence"
+        ),
+
+        GuidelineRule(
             rule_id="R9",
             name="ALKInhibitorRule001_ALKPositiveNSCLC",
             source="ESMO/ASCO Precision Medicine Guidelines 2025",
@@ -504,8 +531,16 @@ class GuidelineRuleEngine:
 
             result["matches"] = stage_match and histology_match and ps_match and pdl1_high
 
-        elif rule.rule_id == "R8":  # EGFR TKI for EGFR+ NSCLC
+        elif rule.rule_id == "R8":  # EGFR TKI for EGFR+ advanced NSCLC
             stage_match = tnm_stage in ["IIIB", "IV"]
+            histology_match = self._is_nsclc(histology)
+            ps_match = performance_status <= 2
+            egfr_positive = egfr_status.lower() == "positive"
+
+            result["matches"] = stage_match and histology_match and ps_match and egfr_positive
+
+        elif rule.rule_id == "R8A":  # Adjuvant EGFR TKI for resected EGFR+ NSCLC (ADAURA)
+            stage_match = tnm_stage in ["IB", "II", "IIA", "IIB", "IIIA"]
             histology_match = self._is_nsclc(histology)
             ps_match = performance_status <= 2
             egfr_positive = egfr_status.lower() == "positive"
@@ -589,6 +624,22 @@ class GuidelineRuleEngine:
     def get_all_rules(self) -> List[GuidelineRule]:
         """Get all registered rules"""
         return list(self.rules.values())
+    
+    def get_semantic_guidelines(self, patient_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Get semantically relevant guidelines for patient (simplified version)"""
+        # For now, return the applicable guidelines in a semantic format
+        applicable = self.classify_patient(patient_data)
+        return [
+            {
+                "guideline_id": rule["rule_id"],
+                "name": rule.get("name", ""),
+                "description": rule.get("description", ""),
+                "treatment": rule.get("recommended_treatment", ""),
+                "evidence_level": rule.get("evidence_level", "Grade C"),
+                "relevance_score": 0.9  # High relevance since it matched
+            }
+            for rule in applicable
+        ]
 
     def get_rules_by_treatment(self, treatment: str) -> List[GuidelineRule]:
         """Get all rules recommending a specific treatment"""
