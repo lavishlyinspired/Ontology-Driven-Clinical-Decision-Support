@@ -30,7 +30,7 @@ class IngestionAgent:
     READ-ONLY: Never writes to Neo4j.
     """
 
-    REQUIRED_FIELDS = ["name", "sex", "age", "tnm_stage", "histology_type", "performance_status"]
+    REQUIRED_FIELDS = ["sex", "age", "tnm_stage", "histology_type", "performance_status"]
 
     TNM_NORMALIZATION = {
         # Stage I variants
@@ -97,9 +97,12 @@ class IngestionAgent:
 
         # Step 3: Create PatientFact
         try:
+            # Generate default name if not provided
+            patient_name = normalized_data.get("name", f"Patient_{normalized_data.get('patient_id', 'Unknown')}")
+            
             patient_fact = PatientFact(
                 patient_id=normalized_data.get("patient_id"),
-                name=normalized_data["name"],
+                name=patient_name,
                 sex=normalized_data["sex"],
                 age_at_diagnosis=normalized_data["age"],
                 tnm_stage=normalized_data["tnm_stage"],

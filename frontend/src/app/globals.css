@@ -281,13 +281,25 @@ h3 {
   @apply bg-gray-300 rounded-full hover:bg-gray-400;
 }
 
+/* Chat page fullscreen override */
+.chat-fullscreen {
+  margin: -2rem;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar {
     @apply hidden;
   }
-  
+
   .main-content {
     @apply ml-0;
+  }
+
+  .chat-fullscreen {
+    margin: 0;
   }
 }

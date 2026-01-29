@@ -145,9 +145,25 @@ class IntegratedLCAWorkflow:
                 
                 # These require Neo4j read tools
                 if read_tools:
-                    self.survival_analyzer = SurvivalAnalyzer(read_tools)
-                    self.counterfactual_engine = CounterfactualEngine(self)
-                    self.clinical_trial_matcher = ClinicalTrialMatcher()
+                    try:
+                        self.survival_analyzer = SurvivalAnalyzer(read_tools)
+                        logger.info(f"[Init] SurvivalAnalyzer initialized: {self.survival_analyzer is not None}")
+                    except Exception as e:
+                        logger.warning(f"[Init] SurvivalAnalyzer failed: {e}")
+                        
+                    try:
+                        self.counterfactual_engine = CounterfactualEngine(self)
+                        logger.info(f"[Init] CounterfactualEngine initialized: {self.counterfactual_engine is not None}")
+                    except Exception as e:
+                        logger.warning(f"[Init] CounterfactualEngine failed: {e}")
+                        
+                    try:
+                        self.clinical_trial_matcher = ClinicalTrialMatcher()
+                        logger.info(f"[Init] ClinicalTrialMatcher initialized: {self.clinical_trial_matcher is not None}")
+                    except Exception as e:
+                        logger.warning(f"[Init] ClinicalTrialMatcher failed: {e}")
+                else:
+                    logger.warning("[Init] Neo4j read tools not available - SurvivalAnalyzer, CounterfactualEngine, ClinicalTrialMatcher will be disabled")
                 
                 logger.info("✓ Analytics suite loaded (UncertaintyQuantifier active)")
             except ImportError as e:
@@ -197,7 +213,8 @@ class IntegratedLCAWorkflow:
     async def analyze_patient_comprehensive(
         self,
         patient_data: Dict[str, Any],
-        persist: bool = False
+        persist: bool = False,
+        progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
         Comprehensive patient analysis with all enhancements
@@ -214,18 +231,31 @@ class IntegratedLCAWorkflow:
         Args:
             patient_data: Patient clinical data
             persist: Whether to save results to Neo4j
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Complete analysis results with recommendations, confidence, analytics
         """
 
+        async def notify_progress(message: str):
+            """Helper to notify progress if callback exists"""
+            if progress_callback:
+                try:
+                    await progress_callback(message)
+                except Exception as e:
+                    logger.warning(f"Progress callback failed: {e}")
+
         start_time = datetime.now()
+        
+        await notify_progress("🔬 Starting integrated multi-agent workflow...")
         
         logger.info("="*80)
         logger.info("🔬 INTEGRATED WORKFLOW EXECUTION")
         logger.info("="*80)
         logger.info(f"📋 Patient ID: {patient_data.get('patient_id', 'unknown')}")
         logger.info("")
+        
+        await notify_progress("📊 Loading agent components...")
         
         # Log all available components
         logger.info("🎯 AGENTS (11 total):")
@@ -272,18 +302,25 @@ class IntegratedLCAWorkflow:
         
         try:
             # Delegate to orchestrator for adaptive workflow execution
+            await notify_progress("🤖 Running orchestrator with dynamic agent routing...")
             orchestrator_result = await self.orchestrator.orchestrate_adaptive_workflow(
                 patient_data=patient_data,
-                agent_registry=agent_registry
+                agent_registry=agent_registry,
+                progress_callback=notify_progress
             )
             
             # Extract orchestrator results
             complexity = WorkflowComplexity(orchestrator_result["complexity"])
-            logger.info(f"Orchestrator executed {len(orchestrator_result['successful_agents'])} agents")
-
-            # Extract orchestrator results
-            complexity = WorkflowComplexity(orchestrator_result["complexity"])
-            logger.info(f"Orchestrator executed {len(orchestrator_result['successful_agents'])} agents")
+            successful_count = len(orchestrator_result['successful_agents'])
+            skipped_count = len(orchestrator_result.get('skipped_agents', []))
+            failed_count = len(orchestrator_result.get('failed_agents', []))
+            
+            logger.info(f"Orchestrator completed: {successful_count} successful, {failed_count} failed, {skipped_count} skipped")
+            
+            if skipped_count > 0:
+                skipped_list = ', '.join(orchestrator_result['skipped_agents'])
+                logger.warning(f"⚠ Skipped agents (not available): {skipped_list}")
+                await notify_progress(f"⚠ Note: {skipped_count} agents unavailable ({skipped_list})")
             
             # Get base results from orchestrator
             workflow_results = {
@@ -292,7 +329,8 @@ class IntegratedLCAWorkflow:
                 "complexity": complexity.value,
                 "agent_chain": orchestrator_result["agent_path"],
                 "successful_agents": orchestrator_result["successful_agents"],
-                "failed_agents": orchestrator_result["failed_agents"],
+                "failed_agents": orchestrator_result.get("failed_agents", []),
+                "skipped_agents": orchestrator_result.get("skipped_agents", []),
                 "timestamps": {
                     "start": start_time.isoformat(),
                     "orchestrator_duration_ms": orchestrator_result["total_duration_ms"]
@@ -307,35 +345,57 @@ class IntegratedLCAWorkflow:
             ingestion_result = orchestrator_result["results"].get("IngestionAgent")
             mapping_result = orchestrator_result["results"].get("SemanticMappingAgent")
             
+            # Debug: Log what agents ran and what results we have
+            logger.info(f"🔍 DEBUG: Orchestrator results keys: {list(orchestrator_result['results'].keys())}")
+            logger.info(f"🔍 DEBUG: Ingestion result type: {type(ingestion_result)}")
+            logger.info(f"🔍 DEBUG: Successful agents: {orchestrator_result['successful_agents']}")
+            
             if not ingestion_result:
+                logger.error(f"❌ CRITICAL: Ingestion agent did not execute!")
+                logger.error(f"   Available results: {list(orchestrator_result['results'].keys())}")
+                logger.error(f"   Successful agents: {orchestrator_result['successful_agents']}")
+                logger.error(f"   Failed agents: {orchestrator_result['failed_agents']}")
                 workflow_results["status"] = "failed_ingestion"
                 workflow_results["errors"].append("Ingestion agent did not execute")
                 return workflow_results
             
             # Use orchestrator's processed patient data
             patient_with_codes = final_output.get("SemanticMappingAgent_output", ingestion_result)
-            
-            # Domain-specific enhancement: NSCLC/SCLC specialized processing
+
+            await notify_progress("🧬 Running specialized agents (NSCLC/SCLC/Biomarker)...")
+            logger.info(f"🔬 SPECIALIZED AGENTS:")
+            logger.info(f"   Biomarker profile: {patient_data.get('biomarker_profile', {})}")
             proposals = await self._execute_specialized_agents(patient_data, patient_with_codes)
+            logger.info(f"   ✓ Generated {len(proposals)} treatment proposals")
+            for i, p in enumerate(proposals):
+                logger.info(f"   Proposal {i+1}: {p.treatment} (confidence: {p.confidence:.2f})")
             workflow_results["proposals_evaluated"] = len(proposals)
-            # Domain-specific enhancement: NSCLC/SCLC specialized processing
-            proposals = await self._execute_specialized_agents(patient_data, patient_with_codes)
-            workflow_results["proposals_evaluated"] = len(proposals)
-            
+
             # Multi-agent negotiation (if multiple proposals)
+            if len(proposals) > 1:
+                await notify_progress(f"🤝 Negotiating between {len(proposals)} treatment proposals...")
             final_recommendation = await self._run_negotiation(proposals, workflow_results)
-            
+            if final_recommendation:
+                logger.info(f"   ✓ Final recommendation: {final_recommendation.treatment}")
+                await notify_progress(f"✅ Recommendation: {final_recommendation.treatment}")
+            else:
+                logger.warning(f"   ✗ No final recommendation generated!")
+
             # Advanced analytics (for complex/critical cases)
+            if complexity in [WorkflowComplexity.COMPLEX, WorkflowComplexity.CRITICAL]:
+                await notify_progress("📊 Running advanced analytics suite...")
             analytics_results = await self._run_analytics_suite(
                 complexity, final_recommendation, patient_with_codes, patient_data
             )
             workflow_results["analytics"] = analytics_results
-            
+
+            # Generate explanation
+            await notify_progress("📝 Generating MDT summary...")
             # Generate explanation
             mdt_summary = self._generate_explanation(patient_with_codes, final_recommendation)
             workflow_results["mdt_summary"] = mdt_summary
 
-            # Step 9: Compile final results
+            # Compile final results
             end_time = datetime.now()
             workflow_results.update({
                 "status": "success",
@@ -347,6 +407,8 @@ class IntegratedLCAWorkflow:
                 "processing_time_ms": int((end_time - start_time).total_seconds() * 1000),
                 "context_graph": orchestrator_result.get("context_graph", {})
             })
+
+            logger.info(f"   ✓ Workflow complete with {len(workflow_results.get('recommendations', []))} recommendations")
 
             # Step 10: Context graph (from orchestrator)
             workflow_results["context_graph"] = self.orchestrator.context_graph.to_dict()
@@ -364,42 +426,80 @@ class IntegratedLCAWorkflow:
     
     def _build_agent_registry(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
         """Build agent registry for orchestrator"""
+        from ..db.models import PatientFact, PatientFactWithCodes, ClassificationResult, Sex, TNMStage, HistologyType
+
+        # Helper to create PatientFact from dict
+        def _make_patient_fact(data: Dict) -> PatientFact:
+            # Get laterality with valid default (enum only allows Right, Left, Bilateral)
+            laterality = data.get("laterality", patient_data.get("laterality"))
+            if laterality not in ["Right", "Left", "Bilateral"]:
+                laterality = "Right"  # Default to Right if not specified or invalid
+
+            return PatientFact(
+                patient_id=data.get("patient_id", patient_data.get("patient_id", "unknown")),
+                name=data.get("name", patient_data.get("name", "Unknown Patient")),
+                age_at_diagnosis=data.get("age_at_diagnosis", data.get("age", patient_data.get("age", 65))),
+                sex=data.get("sex", patient_data.get("sex", "U")),
+                tnm_stage=data.get("tnm_stage", patient_data.get("tnm_stage", "IV")),
+                histology_type=data.get("histology_type", patient_data.get("histology_type", "Adenocarcinoma")),
+                performance_status=data.get("performance_status", patient_data.get("performance_status", 1)),
+                laterality=laterality,
+                fev1_percent=data.get("fev1_percent", patient_data.get("fev1_percent")),
+                comorbidities=data.get("comorbidities", patient_data.get("comorbidities", []))
+            )
+
+        # Helper to create PatientFactWithCodes from dict
+        def _make_patient_with_codes(data: Dict) -> PatientFactWithCodes:
+            # Get laterality with valid default (enum only allows Right, Left, Bilateral)
+            laterality = data.get("laterality", patient_data.get("laterality"))
+            if laterality not in ["Right", "Left", "Bilateral"]:
+                laterality = "Right"  # Default to Right if not specified or invalid
+
+            return PatientFactWithCodes(
+                patient_id=data.get("patient_id", patient_data.get("patient_id", "unknown")),
+                name=data.get("name", patient_data.get("name", "Unknown Patient")),
+                age_at_diagnosis=data.get("age_at_diagnosis", data.get("age", patient_data.get("age", 65))),
+                sex=data.get("sex", patient_data.get("sex", "U")),
+                tnm_stage=data.get("tnm_stage", patient_data.get("tnm_stage", "IV")),
+                histology_type=data.get("histology_type", patient_data.get("histology_type", "Adenocarcinoma")),
+                performance_status=data.get("performance_status", patient_data.get("performance_status", 1)),
+                laterality=laterality,
+                fev1_percent=data.get("fev1_percent", patient_data.get("fev1_percent")),
+                comorbidities=data.get("comorbidities", patient_data.get("comorbidities", [])),
+                snomed_codes=data.get("snomed_codes", {}),
+                mapping_confidence=data.get("mapping_confidence", 0.85)
+            )
+
         async def ingestion_wrapper(data):
+            # IngestionAgent expects raw dict and returns PatientFact
             result, errors = self.ingestion.execute(data)
             return result
-        
+
         async def semantic_mapping_wrapper(data):
             ingestion_result = data.get("IngestionAgent_output", data)
+            # Convert dict to PatientFact if needed
+            if isinstance(ingestion_result, dict):
+                ingestion_result = _make_patient_fact(ingestion_result)
             result, confidence = self.semantic_mapping.execute(ingestion_result)
             return result
-        
+
         async def classification_wrapper(data):
             mapped_data = data.get("SemanticMappingAgent_output", data)
+            # Convert dict to PatientFactWithCodes if needed
+            if isinstance(mapped_data, dict):
+                mapped_data = _make_patient_with_codes(mapped_data)
             return self.classification.execute(mapped_data)
-        
+
         async def explanation_wrapper(data):
-            # Convert dict to patient_with_codes if needed
-            from ..db.models import PatientFactWithCodes, ClassificationResult
-            
-            patient_with_codes = data.get("SemanticMappingAgent_output")
+            patient_with_codes = data.get("SemanticMappingAgent_output", data)
             classification = data.get("ClassificationAgent_output")
-            
-            if not isinstance(patient_with_codes, PatientFactWithCodes):
-                # Create a minimal PatientFactWithCodes from dict
-                patient_with_codes = PatientFactWithCodes(
-                    patient_id=patient_data.get("patient_id", "unknown"),
-                    age=patient_data.get("age", 0),
-                    sex=patient_data.get("sex", "U"),
-                    tnm_stage=patient_data.get("tnm_stage", "Unknown"),
-                    histology_type=patient_data.get("histology_type", "Unknown"),
-                    performance_status=patient_data.get("performance_status", 0),
-                    snomed_codes={},
-                    mapping_confidence=0.0
-                )
-            
+
+            # Convert dict to PatientFactWithCodes if needed
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
+
             # Ensure we have a valid classification
             if classification is None or not isinstance(classification, ClassificationResult):
-                # Create a minimal classification from available data
                 classification = ClassificationResult(
                     patient_id=patient_data.get("patient_id", "unknown"),
                     scenario="Unknown",
@@ -407,7 +507,7 @@ class IntegratedLCAWorkflow:
                     recommendations=[],
                     reasoning_chain=["Classification data not available"]
                 )
-            
+
             return self.explanation.execute(patient_with_codes, classification)
         
         # Base registry
@@ -421,26 +521,31 @@ class IntegratedLCAWorkflow:
         # Add biomarker agent
         async def biomarker_wrapper(data):
             patient_with_codes = data.get("SemanticMappingAgent_output", data)
-            # BiomarkerAgent.execute expects patient and optional biomarker_profile
-            return self.biomarker.execute(patient_with_codes, None)
+            # Convert dict to object if needed
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
+            # Get biomarker_profile from original patient_data
+            biomarker_profile = patient_data.get("biomarker_profile", {})
+            return self.biomarker.execute(patient_with_codes, biomarker_profile)
         registry["BiomarkerAgent"] = biomarker_wrapper
-        
+
         # Add comorbidity agent (always available)
         async def comorbidity_wrapper(data):
             patient_with_codes = data.get("SemanticMappingAgent_output", data)
+            # Convert dict to object if needed
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
             # Get treatment from classification if available
             classification = data.get("ClassificationAgent_output")
             treatment = "Unknown"
             if classification and hasattr(classification, 'recommendations') and classification.recommendations:
                 rec = classification.recommendations[0] if isinstance(classification.recommendations, list) else classification.recommendations
-                # Check for 'treatment' or 'primary_treatment' key
                 if isinstance(rec, dict):
                     treatment = rec.get('treatment') or rec.get('primary_treatment', 'Unknown')
                 else:
                     treatment = getattr(rec, 'treatment', None) or getattr(rec, 'primary_treatment', 'Unknown')
             elif classification and hasattr(classification, 'scenario'):
                 treatment = classification.scenario
-            # ComorbidityAgent.execute expects patient, treatment, and optional comorbidity_profile
             return self.comorbidity.execute(patient_with_codes, treatment, None)
         registry["ComorbidityAgent"] = comorbidity_wrapper
         
@@ -460,18 +565,19 @@ class IntegratedLCAWorkflow:
             async def uncertainty_wrapper(data):
                 classification = data.get("ClassificationAgent_output")
                 patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                # Convert dict to object if needed
+                if isinstance(patient_with_codes, dict):
+                    patient_with_codes = _make_patient_with_codes(patient_with_codes)
                 if classification and hasattr(classification, 'recommendations'):
                     for rec in classification.recommendations:
-                        # Create a TreatmentRecommendation-like object if rec is dict
                         if isinstance(rec, dict):
                             from ..db.models import TreatmentRecommendation, TreatmentIntent, EvidenceLevel
-                            # Check for 'treatment' or 'primary_treatment' key
                             treatment_name = rec.get('treatment') or rec.get('primary_treatment', 'Unknown')
                             treatment_rec = TreatmentRecommendation(
-                                patient_id=getattr(patient_with_codes, 'patient_id', 'Unknown'),
+                                patient_id=patient_with_codes.patient_id,
                                 primary_treatment=treatment_name,
                                 treatment_intent=TreatmentIntent.PALLIATIVE,
-                                evidence_level=EvidenceLevel.GRADE_B,  # Use valid enum value
+                                evidence_level=EvidenceLevel.GRADE_B,
                                 confidence_score=rec.get('confidence', 0.8),
                                 rationale=rec.get('rationale', 'Treatment recommendation')
                             )
@@ -486,19 +592,29 @@ class IntegratedLCAWorkflow:
         # Add NSCLC agent
         async def nsclc_wrapper(data):
             patient_with_codes = data.get("SemanticMappingAgent_output", data)
-            biomarker_profile = data.get("biomarker_profile", {})
-            histology = getattr(patient_with_codes, 'histology_type', '') if hasattr(patient_with_codes, 'histology_type') else str(patient_with_codes.get('histology_type', ''))
+            # Convert dict to object if needed
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
+            # Get biomarker_profile from original patient_data
+            biomarker_profile = patient_data.get("biomarker_profile", {})
+            histology = getattr(patient_with_codes, 'histology_type', 'Unknown')
             if 'small cell' not in histology.lower():
                 result = self.nsclc.execute(patient_with_codes, biomarker_profile)
-                logger.info(f"[NSCLCAgent] Executed for patient, treatment: {getattr(result, 'treatment', 'Unknown')}")
+                if result:
+                    logger.info(f"[NSCLCAgent] Executed for patient, treatment: {result.treatment}")
+                else:
+                    logger.info(f"[NSCLCAgent] Deferred to BiomarkerAgent (actionable biomarker detected)")
                 return result
             return None
         registry["NSCLCAgent"] = nsclc_wrapper
-        
+
         # Add SCLC agent
         async def sclc_wrapper(data):
             patient_with_codes = data.get("SemanticMappingAgent_output", data)
-            histology = getattr(patient_with_codes, 'histology_type', '') if hasattr(patient_with_codes, 'histology_type') else str(patient_with_codes.get('histology_type', ''))
+            # Convert dict to object if needed
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
+            histology = getattr(patient_with_codes, 'histology_type', 'Unknown')
             if 'small cell' in histology.lower():
                 result = self.sclc.execute(patient_with_codes)
                 logger.info(f"[SCLCAgent] Executed for patient, treatment: {getattr(result, 'treatment', 'Unknown')}")
@@ -510,16 +626,21 @@ class IntegratedLCAWorkflow:
         if self.persistence:
             async def persistence_wrapper(data):
                 patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                # Convert dict to object if needed
+                if isinstance(patient_with_codes, dict):
+                    patient_with_codes = _make_patient_with_codes(patient_with_codes)
                 classification = data.get("ClassificationAgent_output")
                 result = self.persistence.execute(patient_with_codes, classification)
                 logger.info(f"[PersistenceAgent] Persisted patient data to Neo4j")
                 return result
             registry["PersistenceAgent"] = persistence_wrapper
-        
+
         # Add SurvivalAnalyzer if available
         if self.survival_analyzer:
             async def survival_wrapper(data):
                 patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                if isinstance(patient_with_codes, dict):
+                    patient_with_codes = _make_patient_with_codes(patient_with_codes)
                 treatment = data.get("ClassificationAgent_output", {})
                 if hasattr(treatment, 'recommendations') and treatment.recommendations:
                     rec = treatment.recommendations[0] if isinstance(treatment.recommendations, list) else treatment.recommendations
@@ -529,16 +650,18 @@ class IntegratedLCAWorkflow:
                     return result
                 return None
             registry["SurvivalAnalyzer"] = survival_wrapper
-        
+
         # Add ClinicalTrialMatcher if available
         if self.clinical_trial_matcher:
             async def trial_wrapper(data):
                 patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                if isinstance(patient_with_codes, dict):
+                    patient_with_codes = _make_patient_with_codes(patient_with_codes)
                 patient_dict = {
-                    'patient_id': getattr(patient_with_codes, 'patient_id', 'Unknown'),
-                    'histology': getattr(patient_with_codes, 'histology_type', 'Unknown'),
-                    'stage': getattr(patient_with_codes, 'tnm_stage', 'Unknown'),
-                    'performance_status': getattr(patient_with_codes, 'performance_status', 1)
+                    'patient_id': patient_with_codes.patient_id,
+                    'histology': patient_with_codes.histology_type,
+                    'stage': patient_with_codes.tnm_stage,
+                    'performance_status': patient_with_codes.performance_status
                 }
                 result = self.clinical_trial_matcher.find_eligible_trials(patient_dict)
                 logger.info(f"[ClinicalTrialMatcher] Found {len(result) if result else 0} eligible trials")
@@ -575,21 +698,31 @@ class IntegratedLCAWorkflow:
             histology = getattr(patient_with_codes, 'histology_type', '')
 
         is_sclc = "small cell" in str(histology).lower()
+        logger.info(f"   [Specialized] Histology: {histology}, is_sclc: {is_sclc}")
 
         try:
             if is_sclc:
                 # SCLC pathway
+                logger.info(f"   [Specialized] Running SCLCAgent...")
                 sclc_proposal = self.sclc.execute(patient_with_codes)
                 proposals.append(self._convert_sclc_proposal(sclc_proposal))
+                logger.info(f"   [Specialized] SCLC proposal: {sclc_proposal.treatment}")
             else:
                 # NSCLC pathway
                 biomarker_profile = patient_data.get("biomarker_profile", {})
+                logger.info(f"   [Specialized] Running NSCLCAgent with biomarkers: {biomarker_profile}")
 
                 nsclc_proposal = self.nsclc.execute(patient_with_codes, biomarker_profile)
-                proposals.append(self._convert_nsclc_proposal(nsclc_proposal))
+                if nsclc_proposal:
+                    logger.info(f"   [Specialized] NSCLC proposal: {nsclc_proposal.treatment}")
+                    proposals.append(self._convert_nsclc_proposal(nsclc_proposal))
+                else:
+                    logger.info(f"   [Specialized] NSCLC deferred to BiomarkerAgent (actionable mutation detected)")
 
                 if biomarker_profile:
+                    logger.info(f"   [Specialized] Running BiomarkerAgent...")
                     biomarker_proposal = self.biomarker.execute(patient_with_codes, biomarker_profile)
+                    logger.info(f"   [Specialized] Biomarker proposal: {biomarker_proposal.treatment}")
                     proposals.append(self._convert_biomarker_proposal(biomarker_proposal))
 
             # Comorbidity assessment
@@ -604,7 +737,7 @@ class IntegratedLCAWorkflow:
                         logger.warning(f"Comorbidity assessment failed: {e}")
 
         except Exception as e:
-            logger.error(f"Specialized agents execution failed: {e}")
+            logger.error(f"Specialized agents execution failed: {e}", exc_info=True)
             # Return a default proposal if specialized agents fail
             proposals.append(AgentProposal(
                 agent_id="fallback",
@@ -613,7 +746,7 @@ class IntegratedLCAWorkflow:
                 confidence=0.7,
                 evidence_level="Grade B",
                 treatment_intent="Palliative",
-                rationale="Default recommendation due to processing error",
+                rationale=f"Default recommendation due to processing error: {str(e)}",
                 guideline_reference="NCCN NSCLC 2025",
                 contraindications=[],
                 risk_score=0.5
@@ -625,6 +758,11 @@ class IntegratedLCAWorkflow:
         self, proposals: List[AgentProposal], workflow_results: Dict[str, Any]
     ) -> Optional[AgentProposal]:
         """Run multi-agent negotiation if enabled"""
+        # Return None if no proposals
+        if not proposals:
+            return None
+            
+        # If negotiation enabled and multiple proposals, run negotiation
         if self.negotiation and len(proposals) > 1:
             negotiation_result = self.negotiation.negotiate(proposals)
             workflow_results["negotiation"] = {
@@ -639,7 +777,9 @@ class IntegratedLCAWorkflow:
                     return proposal
             # If no exact match, return first proposal as fallback
             return proposals[0]
-        return proposals[0] if proposals else None
+        
+        # Single proposal or negotiation disabled - return first proposal
+        return proposals[0]
     
     async def _run_analytics_suite(
         self, complexity: WorkflowComplexity, recommendation: Any, 

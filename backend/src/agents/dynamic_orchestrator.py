@@ -296,8 +296,8 @@ class DynamicWorkflowOrchestrator:
         if len(biomarkers) > 3:
             complexity_score += 1.0
 
-        # Age extremes
-        age = patient_data.get("age_at_diagnosis", 65)
+        # Age extremes - support both field names
+        age = patient_data.get("age_at_diagnosis", patient_data.get("age", 65))
         if age < 40 or age > 80:
             complexity_score += 0.5
 
@@ -330,7 +330,7 @@ class DynamicWorkflowOrchestrator:
         ]
 
         if complexity == WorkflowComplexity.SIMPLE:
-            # Fast path: core agents + biomarker + comorbidity
+            # Fast path: core agents + biomarker + comorbidity + persistence
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
@@ -339,11 +339,12 @@ class DynamicWorkflowOrchestrator:
                 "ComorbidityAgent",
                 "NSCLCAgent",
                 "ConflictResolutionAgent",
-                "ExplanationAgent"
+                "ExplanationAgent",
+                "PersistenceAgent"
             ]
 
         elif complexity == WorkflowComplexity.MODERATE:
-            # Standard path: include uncertainty quantification
+            # Standard path: include uncertainty quantification + persistence + SCLC + Survival
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
@@ -351,13 +352,16 @@ class DynamicWorkflowOrchestrator:
                 "BiomarkerAgent",
                 "ComorbidityAgent",
                 "NSCLCAgent",
+                "SCLCAgent",
+                "SurvivalAnalyzer",
                 "ConflictResolutionAgent",
                 "UncertaintyQuantifier",
-                "ExplanationAgent"
+                "ExplanationAgent",
+                "PersistenceAgent"
             ]
 
         elif complexity == WorkflowComplexity.COMPLEX:
-            # Extended path: add analytics agents
+            # Extended path: add analytics agents + persistence
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
@@ -370,7 +374,8 @@ class DynamicWorkflowOrchestrator:
                 "ConflictResolutionAgent",
                 "UncertaintyQuantifier",
                 "ClinicalTrialMatcher",
-                "ExplanationAgent"
+                "ExplanationAgent",
+                "PersistenceAgent"
             ]
 
         else:  # CRITICAL
@@ -384,12 +389,12 @@ class DynamicWorkflowOrchestrator:
                 "NSCLCAgent",
                 "SCLCAgent",
                 "SurvivalAnalyzer",
-                "ClinicalTrialMatcher",
                 "ConflictResolutionAgent",
                 "UncertaintyQuantifier",
+                "ClinicalTrialMatcher",
                 "CounterfactualEngine",
-                "PersistenceAgent",
-                "ExplanationAgent"
+                "ExplanationAgent",
+                "PersistenceAgent"
             ]
 
     async def execute_agent(self, agent_name: str, agent_function: Callable,
@@ -511,13 +516,15 @@ class DynamicWorkflowOrchestrator:
         return execution
 
     async def orchestrate_adaptive_workflow(self, patient_data: Dict[str, Any],
-                                           agent_registry: Dict[str, Callable]) -> Dict[str, Any]:
+                                           agent_registry: Dict[str, Callable],
+                                           progress_callback: Optional[Callable] = None) -> Dict[str, Any]:
         """
         Main orchestration method with adaptive routing
 
         Args:
             patient_data: Input patient data
             agent_registry: Dictionary mapping agent names to callable functions
+            progress_callback: Optional callback for progress updates
 
         Returns:
             Complete workflow results with context graph
@@ -534,6 +541,12 @@ class DynamicWorkflowOrchestrator:
         # Step 2: Select workflow path
         agent_path = self.select_workflow_path(complexity)
         logger.info(f"🛤️  Selected path: {' → '.join(agent_path)}")
+        
+        if progress_callback:
+            logger.info(f"[DEBUG] Progress callback exists, sending agent path message...")
+            await progress_callback(f"🛤️ Agent Path ({complexity.value}): {' → '.join(agent_path[:3])}... ({len(agent_path)} agents total)")
+        else:
+            logger.warning(f"[DEBUG] Progress callback is None, cannot send updates!")
 
         # Step 3: Initialize context graph
         patient_node = ContextNode(
@@ -548,11 +561,21 @@ class DynamicWorkflowOrchestrator:
         results = {}
         current_data = patient_data
 
-        for agent_name in agent_path:
+        for i, agent_name in enumerate(agent_path, 1):
             if agent_name not in agent_registry:
                 logger.warning(f"⚠ Agent {agent_name} not found in registry, skipping")
+                if progress_callback:
+                    await progress_callback(f"⚠ [{i}/{len(agent_path)}] {agent_name}: SKIPPED (not available)")
+                # Mark as skipped in results
+                skipped_execution = AgentExecution(agent_name=agent_name)
+                skipped_execution.status = AgentStatus.SKIPPED
+                results[agent_name] = skipped_execution
                 continue
 
+            logger.info(f"🔄 Executing {agent_name}...")
+            if progress_callback:
+                await progress_callback(f"⚙️ [{i}/{len(agent_path)}] Running {agent_name}...")
+            
             agent_function = agent_registry[agent_name]
 
             # Execute with self-correction if needed
@@ -565,6 +588,13 @@ class DynamicWorkflowOrchestrator:
 
             # Store results
             results[agent_name] = execution
+            
+            # Send completion update
+            if progress_callback:
+                if execution.status == AgentStatus.COMPLETED:
+                    await progress_callback(f"✅ [{i}/{len(agent_path)}] {agent_name} completed ({execution.duration_ms}ms, conf: {execution.confidence:.2f})")
+                elif execution.status == AgentStatus.FAILED:
+                    await progress_callback(f"❌ [{i}/{len(agent_path)}] {agent_name} FAILED")
 
             # Update context graph
             if execution.status == AgentStatus.COMPLETED:
@@ -600,6 +630,12 @@ class DynamicWorkflowOrchestrator:
             name for name, exec in results.items()
             if exec.status == AgentStatus.FAILED
         ]
+        skipped_agents = [
+            name for name, exec in results.items()
+            if exec.status == AgentStatus.SKIPPED
+        ]
+
+        logger.info(f"✓ Workflow complete: {len(successful_agents)} successful, {len(failed_agents)} failed, {len(skipped_agents)} skipped")
 
         return {
             "workflow_id": workflow_id,
@@ -607,6 +643,7 @@ class DynamicWorkflowOrchestrator:
             "agent_path": agent_path,
             "successful_agents": successful_agents,
             "failed_agents": failed_agents,
+            "skipped_agents": skipped_agents,
             "total_duration_ms": total_duration,
             "results": {name: exec.output for name, exec in results.items()},
             "agent_executions": {

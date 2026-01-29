@@ -347,35 +347,47 @@ class NegotiationProtocol:
         patient_context: Optional[Dict[str, Any]]
     ) -> NegotiationResult:
         """
-        Hybrid strategy combining evidence, consensus, and safety.
+        Hybrid strategy combining evidence, consensus, safety, and agent expertise.
 
         Multi-criteria decision making:
-        - Evidence level (30%)
-        - Agent consensus (25%)
-        - Safety profile (25%)
-        - Confidence (20%)
+        - Evidence level (25%)
+        - Agent expertise/priority (30%) - NEW: Biomarker agents get highest priority
+        - Safety profile (20%)
+        - Confidence (25%)
         """
         evidence_scores = {"Grade A": 1.0, "Grade B": 0.67, "Grade C": 0.33, "Unknown": 0.0}
+        
+        # Agent expertise hierarchy - specialized agents get priority
+        agent_priority = {
+            "biomarker_specialist": 1.0,  # Highest - biomarker-driven precision medicine
+            "BiomarkerAgent": 1.0,
+            "sclc_agent": 0.9,            # High - SCLC specialist
+            "SCLCAgent": 0.9,
+            "nsclc_agent": 0.7,           # Moderate - general NSCLC
+            "NSCLCAgent": 0.7,
+            "ClassificationAgent": 0.5,   # Lower - rule-based
+            "fallback": 0.3               # Lowest - fallback recommendations
+        }
 
         # Calculate multi-criteria scores
         scored_proposals = []
 
         for p in proposals:
-            # Evidence score (30%)
-            evidence_score = evidence_scores.get(p.evidence_level, 0.0) * 0.30
+            # Evidence score (25%)
+            evidence_score = evidence_scores.get(p.evidence_level, 0.0) * 0.25
+            
+            # Agent expertise score (30%) - NEW!
+            agent_type = p.agent_type if hasattr(p, 'agent_type') else p.agent_id
+            expertise_score = agent_priority.get(agent_type, 0.5) * 0.30
 
-            # Consensus score (25%) - how many agents agree
-            agreement = sum(1 for other in proposals if other.treatment == p.treatment)
-            consensus_score = (agreement / len(proposals)) * 0.25
+            # Safety score (20%) - inverse of risk
+            safety_score = (1.0 - p.risk_score) * 0.20
 
-            # Safety score (25%) - inverse of risk
-            safety_score = (1.0 - p.risk_score) * 0.25
-
-            # Confidence score (20%)
-            confidence_score = p.confidence * 0.20
+            # Confidence score (25%)
+            confidence_score = p.confidence * 0.25
 
             # Total score
-            total_score = evidence_score + consensus_score + safety_score + confidence_score
+            total_score = evidence_score + expertise_score + safety_score + confidence_score
 
             scored_proposals.append((total_score, p))
 
@@ -391,8 +403,8 @@ class NegotiationProtocol:
         reasoning = (
             f"Selected using hybrid multi-criteria analysis: "
             f"Score {top_score:.2f} (evidence: {top_proposal.evidence_level}, "
+            f"agent: {top_proposal.agent_type if hasattr(top_proposal, 'agent_type') else top_proposal.agent_id}, "
             f"safety: {(1-top_proposal.risk_score):.2f}, "
-            f"consensus: {consensus:.2%}, "
             f"confidence: {top_proposal.confidence:.2%})"
         )
 

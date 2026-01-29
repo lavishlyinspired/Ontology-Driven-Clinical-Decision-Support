@@ -61,6 +61,10 @@ class LUCADAGraphDB:
             import warnings
             warnings.filterwarnings('ignore', category=DeprecationWarning, module='neo4j')
             
+            # Suppress Neo4j notification warnings for missing relationships/properties
+            # These are expected when database is being populated
+            logging.getLogger('neo4j.notifications').setLevel(logging.ERROR)
+            
             self.driver = GraphDatabase.driver(
                 self.config.uri,
                 auth=(self.config.user, self.config.password)

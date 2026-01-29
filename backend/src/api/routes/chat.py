@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 
+import os
+
 from ...services.conversation_service import ConversationService
 from ...services.lca_service import LungCancerAssistantService
 
@@ -16,10 +18,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# Initialize services
+# Initialize services - Neo4j and vector store enabled by default, configurable via env
+use_neo4j = os.getenv("CHAT_USE_NEO4J", "true").lower() == "true"
+use_vector_store = os.getenv("CHAT_USE_VECTOR_STORE", "true").lower() == "true"
+
 lca_service = LungCancerAssistantService(
-    use_neo4j=False,
-    use_vector_store=False,
+    use_neo4j=use_neo4j,
+    use_vector_store=use_vector_store,
     enable_advanced_workflow=True,
     enable_provenance=True
 )

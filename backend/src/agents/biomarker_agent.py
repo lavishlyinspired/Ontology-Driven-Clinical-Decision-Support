@@ -57,6 +57,16 @@ class BiomarkerAgent:
             return patient.get(attr, default)
         return getattr(patient, attr, default)
 
+    def _is_positive(self, value) -> bool:
+        """Check if a biomarker value indicates positive status (handles bool, str, etc.)"""
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ['positive', 'true', 'yes', '+', '1']
+        return bool(value)
+
     def execute(
         self,
         patient: PatientFactWithCodes,
@@ -78,19 +88,27 @@ class BiomarkerAgent:
 
         # Convert dict biomarker_profile to BiomarkerProfile object
         if biomarker_profile is not None and isinstance(biomarker_profile, dict):
+            # Handle boolean values - convert True/False to "Positive"/"Negative"
+            def to_status(val):
+                if val is None:
+                    return None
+                if isinstance(val, bool):
+                    return "Positive" if val else "Negative"
+                return val
+
             biomarker_profile = BiomarkerProfile(
-                egfr_mutation=biomarker_profile.get('egfr_mutation'),
+                egfr_mutation=to_status(biomarker_profile.get('egfr_mutation')),
                 egfr_mutation_type=biomarker_profile.get('egfr_mutation_type'),
-                alk_rearrangement=biomarker_profile.get('alk_rearrangement'),
-                ros1_rearrangement=biomarker_profile.get('ros1_rearrangement'),
-                braf_mutation=biomarker_profile.get('braf_mutation'),
-                met_exon14_skipping=biomarker_profile.get('met_exon14_skipping') or biomarker_profile.get('met_exon14'),
-                ret_rearrangement=biomarker_profile.get('ret_rearrangement'),
-                kras_mutation=biomarker_profile.get('kras_mutation'),
+                alk_rearrangement=to_status(biomarker_profile.get('alk_rearrangement')),
+                ros1_rearrangement=to_status(biomarker_profile.get('ros1_rearrangement')),
+                braf_mutation=to_status(biomarker_profile.get('braf_mutation')),
+                met_exon14_skipping=to_status(biomarker_profile.get('met_exon14_skipping') or biomarker_profile.get('met_exon14')),
+                ret_rearrangement=to_status(biomarker_profile.get('ret_rearrangement')),
+                kras_mutation=to_status(biomarker_profile.get('kras_mutation')),
                 pdl1_tps=biomarker_profile.get('pdl1_tps'),
                 tmb_score=biomarker_profile.get('tmb_score'),
-                her2_mutation=biomarker_profile.get('her2_mutation'),
-                ntrk_fusion=biomarker_profile.get('ntrk_fusion')
+                her2_mutation=to_status(biomarker_profile.get('her2_mutation')),
+                ntrk_fusion=to_status(biomarker_profile.get('ntrk_fusion'))
             )
 
         # Extract biomarker data if not provided
@@ -101,31 +119,31 @@ class BiomarkerAgent:
         proposal = None
 
         # 1. EGFR mutations (highest priority for NSCLC)
-        if biomarker_profile.egfr_mutation == "Positive":
+        if self._is_positive(biomarker_profile.egfr_mutation):
             proposal = self._egfr_pathway(patient, biomarker_profile)
 
         # 2. ALK rearrangements
-        elif biomarker_profile.alk_rearrangement == "Positive":
+        elif self._is_positive(biomarker_profile.alk_rearrangement):
             proposal = self._alk_pathway(patient, biomarker_profile)
 
         # 3. ROS1 rearrangements
-        elif biomarker_profile.ros1_rearrangement == "Positive":
+        elif self._is_positive(biomarker_profile.ros1_rearrangement):
             proposal = self._ros1_pathway(patient, biomarker_profile)
 
         # 4. BRAF V600E mutations
-        elif biomarker_profile.braf_mutation == "V600E":
+        elif biomarker_profile.braf_mutation == "V600E" or self._is_positive(biomarker_profile.braf_mutation):
             proposal = self._braf_pathway(patient, biomarker_profile)
 
         # 5. MET exon 14 skipping
-        elif biomarker_profile.met_exon14_skipping == "Positive":
+        elif self._is_positive(biomarker_profile.met_exon14_skipping):
             proposal = self._met_pathway(patient, biomarker_profile)
 
         # 6. RET rearrangements
-        elif biomarker_profile.ret_rearrangement == "Positive":
+        elif self._is_positive(biomarker_profile.ret_rearrangement):
             proposal = self._ret_pathway(patient, biomarker_profile)
 
         # 7. NTRK fusions (rare but highly actionable)
-        elif biomarker_profile.ntrk_fusion == "Positive":
+        elif self._is_positive(biomarker_profile.ntrk_fusion):
             proposal = self._ntrk_pathway(patient, biomarker_profile)
 
         # 8. High PD-L1 expression (≥50%)

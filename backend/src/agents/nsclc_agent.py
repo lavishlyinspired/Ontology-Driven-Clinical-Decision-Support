@@ -76,17 +76,9 @@ class NSCLCAgent:
 
         # Check for biomarker-driven pathways first
         if biomarker_profile and self._has_actionable_biomarkers(biomarker_profile):
-            # Defer to BiomarkerAgent for driver mutation cases
-            return NSCLCProposal(
-                treatment="Biomarker-directed therapy (see BiomarkerAgent)",
-                confidence=0.95,
-                evidence_level="Grade A",
-                treatment_intent="curative",
-                rationale="Actionable driver mutation detected",
-                subtype_specific=False,
-                biomarker_driven=True,
-                risk_score=0.2
-            )
+            # Return None - defer completely to BiomarkerAgent for driver mutation cases
+            # The BiomarkerAgent will provide the specific targeted therapy recommendation
+            return None
 
         # Stage-based recommendations for NSCLC without driver mutations
         stage = tnm_stage
@@ -125,9 +117,20 @@ class NSCLCAgent:
 
     def _has_actionable_biomarkers(self, biomarker_profile: Dict[str, Any]) -> bool:
         """Check for actionable driver mutations"""
-        actionable_markers = [
-            "EGFR", "ALK", "ROS1", "BRAF", "MET", "RET", "NTRK", "KRAS"
+        # Check for specific biomarker keys that indicate actionable mutations
+        actionable_keys = [
+            'egfr_mutation', 'alk_rearrangement', 'ros1_rearrangement',
+            'braf_mutation', 'met_exon14', 'met_exon14_skipping',
+            'ret_rearrangement', 'ntrk_fusion', 'kras_mutation'
         ]
+
+        for key in actionable_keys:
+            value = biomarker_profile.get(key)
+            if value is True or (isinstance(value, str) and value.lower() in ['positive', 'true', '+', 'yes']):
+                return True
+
+        # Also check legacy format (uppercase keys)
+        actionable_markers = ["EGFR", "ALK", "ROS1", "BRAF", "MET", "RET", "NTRK", "KRAS"]
         return any(marker in biomarker_profile for marker in actionable_markers)
 
     def _early_stage_nsclc(self, patient, subtype: NSCLCSubtype) -> NSCLCProposal:

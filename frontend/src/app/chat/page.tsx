@@ -6,5 +6,9 @@ export const metadata = {
 }
 
 export default function ChatPage() {
-  return <ChatInterface />
+  return (
+    <div className="chat-fullscreen">
+      <ChatInterface />
+    </div>
+  )
 }

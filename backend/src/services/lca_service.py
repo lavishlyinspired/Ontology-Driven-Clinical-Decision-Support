@@ -254,7 +254,8 @@ class LungCancerAssistantService:
             return await self._execute_integrated_workflow(
                 patient_data, 
                 start_time, 
-                provenance_session_id
+                provenance_session_id,
+                progress_callback
             )
         else:
             return await self._execute_basic_workflow(
@@ -492,7 +493,8 @@ class LungCancerAssistantService:
         self,
         patient_data: Dict[str, Any],
         start_time: datetime,
-        provenance_session_id: Optional[str]
+        provenance_session_id: Optional[str],
+        progress_callback: Optional[callable] = None
     ) -> PatientDecisionSupport:
         """Execute patient processing with integrated advanced workflow (orchestrator handles routing)"""
         patient_id = patient_data["patient_id"]
@@ -530,7 +532,8 @@ class LungCancerAssistantService:
             # Run integrated workflow (orchestrator handles complexity assessment internally)
             result = await self.integrated_workflow.analyze_patient_comprehensive(
                 patient_data=patient_data,
-                persist=bool(self.graph_db and self.graph_db.driver)
+                persist=bool(self.graph_db and self.graph_db.driver),
+                progress_callback=progress_callback
             )
             
             # Extract complexity from orchestrator's result
@@ -628,7 +631,7 @@ class LungCancerAssistantService:
             patient_scenarios=scenarios,
             recommendations=recommendations,
             mdt_summary=mdt_summary,
-            similar_patients=[],  # Integrated workflow handles this internally
+            similar_patients=similar_patients,
             semantic_guidelines=[],
             workflow_type="integrated",
             complexity_level=complexity_level,
@@ -659,7 +662,7 @@ class LungCancerAssistantService:
             }
         
         complexity = self.orchestrator.assess_complexity(patient_data)
-        use_advanced = complexity in [WorkflowComplexity.COMPLEX, WorkflowComplexity.CRITICAL]
+        use_advanced = complexity in [WorkflowComplexity.MODERATE, WorkflowComplexity.COMPLEX, WorkflowComplexity.CRITICAL]
         
         return {
             "complexity": complexity.value,
