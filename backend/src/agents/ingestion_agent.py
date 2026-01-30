@@ -73,14 +73,19 @@ class IngestionAgent:
     def execute(self, raw_data: Dict[str, Any]) -> Tuple[Optional[PatientFact], List[str]]:
         """
         Execute ingestion: validate and normalize patient data.
-        
+
         Args:
             raw_data: Raw patient data dictionary
-            
+
         Returns:
             Tuple of (PatientFact or None, list of error messages)
         """
-        logger.info(f"[{self.name}] Processing patient data...")
+        logger.info("=" * 60)
+        logger.info(f"[{self.name}] STARTING EXECUTION")
+        logger.info("=" * 60)
+        logger.info(f"[{self.name}] INPUT DATA:")
+        for key, value in raw_data.items():
+            logger.info(f"  • {key}: {value}")
         errors = []
 
         # Step 1: Validate required fields
@@ -117,9 +122,22 @@ class IngestionAgent:
             )
             
             logger.info(f"[{self.name}] ✓ Patient {patient_fact.patient_id} ingested successfully")
+            logger.info(f"[{self.name}] OUTPUT PatientFact:")
+            logger.info(f"  • patient_id: {patient_fact.patient_id}")
+            logger.info(f"  • name: {patient_fact.name}")
+            logger.info(f"  • sex: {patient_fact.sex}")
+            logger.info(f"  • age: {patient_fact.age_at_diagnosis}")
+            logger.info(f"  • stage: {patient_fact.tnm_stage}")
+            logger.info(f"  • histology: {patient_fact.histology_type}")
+            logger.info(f"  • PS: {patient_fact.performance_status}")
+            logger.info(f"  • comorbidities: {patient_fact.comorbidities}")
+            logger.info("=" * 60)
+            logger.info(f"[{self.name}] EXECUTION COMPLETE - SUCCESS")
+            logger.info("=" * 60)
             return patient_fact, []
 
         except Exception as e:
+            logger.error(f"[{self.name}] EXECUTION FAILED: {str(e)}")
             errors.append(f"Failed to create PatientFact: {str(e)}")
             return None, errors
 

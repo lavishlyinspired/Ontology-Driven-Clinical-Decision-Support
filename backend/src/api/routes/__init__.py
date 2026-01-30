@@ -19,11 +19,13 @@ from .export import router as export_router
 from .system import router as system_router
 from .digital_twin_api import router as digital_twin_router
 from .chat import router as chat_router
+from .graph import router as graph_router
+from .chat_graph import router as chat_graph_router
 
 __all__ = [
     "patients_router",
     "patient_crud_router",
-    "treatments_router", 
+    "treatments_router",
     "guidelines_router",
     "analytics_router",
     "analytics_detail_router",
@@ -36,6 +38,8 @@ __all__ = [
     "export_router",
     "system_router",
     "digital_twin_router",
-    "chat_router"
+    "chat_router",
+    "graph_router",
+    "chat_graph_router"
 ]
 

@@ -65,7 +65,7 @@ from src.db.neo4j_tools import Neo4jTools
 from src.api.routes import (
     patients_router,
     patient_crud_router,
-    treatments_router, 
+    treatments_router,
     guidelines_router,
     analytics_router,
     analytics_detail_router,
@@ -77,7 +77,9 @@ from src.api.routes import (
     counterfactual_router,
     export_router,
     system_router,
-    chat_router
+    chat_router,
+    graph_router,
+    chat_graph_router
 )
 
 # Initialize FastAPI
@@ -226,6 +228,8 @@ app.include_router(counterfactual_router)  # Already has /api/v1/analytics prefi
 app.include_router(export_router)  # Already has /api/v1/export prefix
 app.include_router(system_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")  # Chat streaming endpoint
+app.include_router(graph_router, prefix="/api")  # Graph visualization endpoints
+app.include_router(chat_graph_router, prefix="/api")  # Enhanced chat with graph integration
 
 # Global service instance
 lca_service: Optional[LungCancerAssistantService] = None
@@ -314,7 +318,7 @@ async def startup_event():
     global lca_service
 
     print("=" * 80)
-    print("🚀 Starting Lung Cancer Assistant API v2.0.0")
+    print("Starting Lung Cancer Assistant API v2.0.0")
     print("=" * 80)
 
     # Step 1: Initialize core LCA service

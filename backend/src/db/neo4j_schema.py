@@ -60,11 +60,12 @@ class LUCADAGraphDB:
         try:
             # Suppress Neo4j warnings about non-existent relationships (expected for new patients)
             import warnings
+            import logging as stdlib_logging
             warnings.filterwarnings('ignore', category=DeprecationWarning, module='neo4j')
             
             # Suppress Neo4j notification warnings for missing relationships/properties
             # These are expected when database is being populated
-            logging.getLogger('neo4j.notifications').setLevel(logging.ERROR)
+            stdlib_logging.getLogger('neo4j.notifications').setLevel(stdlib_logging.ERROR)
             
             self.driver = GraphDatabase.driver(
                 self.config.uri,

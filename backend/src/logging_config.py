@@ -283,7 +283,7 @@ def _configure_component_loggers(level: int, enable_json: bool, enable_file_logg
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-    # Agent logger
+    # Agent logger - captures all agent-related logs
     agent_handler = logging.handlers.RotatingFileHandler(
         LOG_FILE_AGENT,
         maxBytes=20 * 1024 * 1024,
@@ -293,9 +293,17 @@ def _configure_component_loggers(level: int, enable_json: bool, enable_file_logg
     agent_handler.setLevel(level)
     agent_handler.setFormatter(formatter)
 
-    for agent_logger_name in ['lca.agents', 'backend.src.agents']:
+    # Add handler to parent loggers so child loggers inherit
+    agent_logger_names = [
+        'lca.agents',
+        'src.agents',
+        'backend.src.agents',
+    ]
+    for agent_logger_name in agent_logger_names:
         agent_logger = logging.getLogger(agent_logger_name)
+        agent_logger.setLevel(level)
         agent_logger.addHandler(agent_handler)
+        agent_logger.propagate = True  # Ensure propagation
 
     # API logger
     api_handler = logging.handlers.RotatingFileHandler(
@@ -307,11 +315,14 @@ def _configure_component_loggers(level: int, enable_json: bool, enable_file_logg
     api_handler.setLevel(level)
     api_handler.setFormatter(formatter)
 
-    for api_logger_name in ['lca.api', 'backend.src.api']:
+    api_logger_names = ['lca.api', 'src.api', 'backend.src.api']
+    for api_logger_name in api_logger_names:
         api_logger = logging.getLogger(api_logger_name)
+        api_logger.setLevel(level)
         api_logger.addHandler(api_handler)
+        api_logger.propagate = True
 
-    # Workflow logger
+    # Workflow logger - captures workflow orchestration
     workflow_handler = logging.handlers.RotatingFileHandler(
         LOG_FILE_WORKFLOW,
         maxBytes=20 * 1024 * 1024,
@@ -321,9 +332,41 @@ def _configure_component_loggers(level: int, enable_json: bool, enable_file_logg
     workflow_handler.setLevel(level)
     workflow_handler.setFormatter(formatter)
 
-    for workflow_logger_name in ['lca.workflow', 'backend.src.agents.lca_workflow']:
+    workflow_logger_names = [
+        'lca.workflow',
+        'lca.agents.lca_workflow',
+        'lca.agents.integrated_workflow',
+        'lca.agents.dynamic_orchestrator',
+        'src.agents.lca_workflow',
+        'src.agents.integrated_workflow',
+        'src.agents.dynamic_orchestrator',
+    ]
+    for workflow_logger_name in workflow_logger_names:
         workflow_logger = logging.getLogger(workflow_logger_name)
+        workflow_logger.setLevel(level)
         workflow_logger.addHandler(workflow_handler)
+        workflow_logger.propagate = True
+
+    # Services logger - NEW: capture service-level logs
+    services_handler = logging.handlers.RotatingFileHandler(
+        LOGS_DIR / "services.log",
+        maxBytes=20 * 1024 * 1024,
+        backupCount=10,
+        encoding='utf-8'
+    )
+    services_handler.setLevel(level)
+    services_handler.setFormatter(formatter)
+
+    services_logger_names = [
+        'lca.services',
+        'src.services',
+        'backend.src.services',
+    ]
+    for services_logger_name in services_logger_names:
+        services_logger = logging.getLogger(services_logger_name)
+        services_logger.setLevel(level)
+        services_logger.addHandler(services_handler)
+        services_logger.propagate = True
 
 
 def _suppress_noisy_loggers() -> None:

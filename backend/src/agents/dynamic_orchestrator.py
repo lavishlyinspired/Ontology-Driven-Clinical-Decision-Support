@@ -277,45 +277,70 @@ class DynamicWorkflowOrchestrator:
         - Biomarker complexity
         - Age extremes (<40 or >80)
         """
+        logger.info("=" * 60)
+        logger.info("[DynamicOrchestrator] ASSESSING CASE COMPLEXITY")
+        logger.info("=" * 60)
+
         complexity_score = 0.0
+        factors = []
 
         # Stage complexity
         stage = patient_data.get("tnm_stage", "I")
         stage_scores = {"IV": 4, "IIIC": 3.5, "IIIB": 3.3, "IIIA": 3,
                        "IIB": 2.2, "IIA": 2, "IB": 1.2, "IA": 1}
-        complexity_score += stage_scores.get(stage, 1.0)
+        stage_score = stage_scores.get(stage, 1.0)
+        complexity_score += stage_score
+        factors.append(f"Stage {stage}: +{stage_score}")
 
         # Performance status
         ps = patient_data.get("performance_status", 0)
-        complexity_score += ps * 0.8
+        ps_score = ps * 0.8
+        complexity_score += ps_score
+        factors.append(f"PS {ps}: +{ps_score}")
 
         # Comorbidities
         comorbidities = patient_data.get("comorbidities", [])
-        complexity_score += len(comorbidities) * 0.5
+        comorbidity_score = len(comorbidities) * 0.5
+        complexity_score += comorbidity_score
+        if comorbidities:
+            factors.append(f"Comorbidities ({len(comorbidities)}): +{comorbidity_score}")
 
         # Biomarkers
         biomarkers = patient_data.get("biomarker_profile", {})
         if len(biomarkers) > 3:
             complexity_score += 1.0
+            factors.append(f"Biomarkers ({len(biomarkers)}): +1.0")
 
         # Age extremes - support both field names
         age = patient_data.get("age_at_diagnosis", patient_data.get("age", 65))
         if age < 40 or age > 80:
             complexity_score += 0.5
+            factors.append(f"Age extreme ({age}): +0.5")
+
+        # Log all factors
+        logger.info("Complexity Factors:")
+        for factor in factors:
+            logger.info(f"  • {factor}")
+        logger.info(f"Total Score: {complexity_score:.2f}")
 
         # Emergency indicators
         if patient_data.get("emergency", False):
+            logger.info("⚠ EMERGENCY flag detected → CRITICAL")
             return WorkflowComplexity.CRITICAL
 
         # Classify based on score
         if complexity_score >= 6.0:
-            return WorkflowComplexity.CRITICAL
+            result = WorkflowComplexity.CRITICAL
         elif complexity_score >= 4.0:
-            return WorkflowComplexity.COMPLEX
+            result = WorkflowComplexity.COMPLEX
         elif complexity_score >= 2.0:
-            return WorkflowComplexity.MODERATE
+            result = WorkflowComplexity.MODERATE
         else:
-            return WorkflowComplexity.SIMPLE
+            result = WorkflowComplexity.SIMPLE
+
+        logger.info(f"Classification: {result.value} (score={complexity_score:.2f})")
+        logger.info("=" * 60)
+        return result
 
     def select_workflow_path(self, complexity: WorkflowComplexity) -> List[str]:
         """
@@ -534,7 +559,19 @@ class DynamicWorkflowOrchestrator:
         workflow_id = str(uuid4())
         start_time = datetime.now()
 
-        logger.info(f"🚀 Starting adaptive workflow {workflow_id}")
+        logger.info("=" * 80)
+        logger.info("🚀 DYNAMIC WORKFLOW ORCHESTRATOR - START")
+        logger.info("=" * 80)
+        logger.info(f"Workflow ID: {workflow_id}")
+        logger.info(f"Timestamp: {start_time.isoformat()}")
+        logger.info("")
+        logger.info("INPUT PATIENT DATA:")
+        for key, value in patient_data.items():
+            if key not in ['_extraction_meta']:  # Skip internal fields
+                logger.info(f"  • {key}: {value}")
+        logger.info("")
+        logger.info(f"Available Agents: {list(agent_registry.keys())}")
+        logger.info("")
 
         # Step 1: Assess complexity
         complexity = self.assess_complexity(patient_data)
@@ -637,7 +674,25 @@ class DynamicWorkflowOrchestrator:
             if exec.status == AgentStatus.SKIPPED
         ]
 
-        logger.info(f"✓ Workflow complete: {len(successful_agents)} successful, {len(failed_agents)} failed, {len(skipped_agents)} skipped")
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("🏁 WORKFLOW EXECUTION SUMMARY")
+        logger.info("=" * 80)
+        logger.info(f"Total Duration: {total_duration}ms ({total_duration/1000:.2f}s)")
+        logger.info(f"Complexity Level: {complexity.value}")
+        logger.info(f"Agents Executed: {len(agent_path)}")
+        logger.info("")
+        logger.info("AGENT RESULTS:")
+        for name, exec in results.items():
+            status_icon = "✅" if exec.status == AgentStatus.COMPLETED else "❌" if exec.status == AgentStatus.FAILED else "⏭️"
+            logger.info(f"  {status_icon} {name}: {exec.status.value} ({exec.duration_ms}ms, conf: {exec.confidence:.2f})")
+        logger.info("")
+        logger.info(f"Successful: {successful_agents}")
+        logger.info(f"Failed: {failed_agents}")
+        logger.info(f"Skipped: {skipped_agents}")
+        logger.info("=" * 80)
+        logger.info("🏁 WORKFLOW COMPLETE")
+        logger.info("=" * 80)
 
         return {
             "workflow_id": workflow_id,

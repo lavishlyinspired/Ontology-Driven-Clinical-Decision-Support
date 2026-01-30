@@ -1,8 +1,14 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, CheckCircle, XCircle, AlertCircle, Bot, User, Activity, Zap } from 'lucide-react'
+import { Send, Loader2, CheckCircle, XCircle, AlertCircle, Bot, User, Activity, Zap, ChevronDown, ChevronUp } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import type { GraphData, GraphNode } from '@/lib/api'
+
+interface ChatInterfaceProps {
+  onGraphDataChange?: (data: GraphData) => void
+  onDecisionNodesChange?: (decisions: GraphNode[]) => void
+}
 
 interface Message {
   id: string
@@ -11,11 +17,21 @@ interface Message {
   timestamp?: string
   patientData?: any
   complexity?: any
+  graphData?: any
+  toolCalls?: ToolCall[]
   metadata?: {
     complexity?: string
     workflow?: string
     agentStatus?: AgentStatus[]
+    workflowSteps?: WorkflowStep[]
+    logs?: LogEntry[]
   }
+}
+
+interface ToolCall {
+  name: string
+  input: Record<string, unknown>
+  output?: unknown
 }
 
 interface AgentStatus {
@@ -51,7 +67,9 @@ const JSONDisplay = ({ data }: { data: any }) => (
   </div>
 )
 
-const WorkflowTimeline = ({ steps }: { steps: WorkflowStep[] }) => {
+const WorkflowTimeline = ({ steps, isStreaming = false }: { steps: WorkflowStep[], isStreaming?: boolean }) => {
+  const [isExpanded, setIsExpanded] = useState(true)
+
   // Function to parse agent execution messages for better display
   const parseAgentMessage = (content: string) => {
     const agentMatch = content.match(/\[(\d+)\/(\d+)\]\s+(.+)/)
@@ -66,17 +84,46 @@ const WorkflowTimeline = ({ steps }: { steps: WorkflowStep[] }) => {
     return { isAgent: false, message: content }
   }
 
+  // Don't render if no steps
+  if (!steps || steps.length === 0) {
+    return null
+  }
+
+  // Count completed vs total steps
+  const completedSteps = steps.filter(s => s.status === 'completed').length
+  const totalSteps = steps.length
+
   return (
-    <div className="bg-gradient-to-br from-slate-50 to-blue-50 border border-blue-200 rounded-xl p-4 my-3">
-      <div className="flex items-center gap-2 mb-3 text-xs text-blue-600 font-semibold uppercase tracking-wider">
-        <Activity className="w-3.5 h-3.5" />
-        <span>Workflow Progress</span>
-      </div>
-      <div className="space-y-1">
-        {steps.map((step, idx) => {
-          const parsed = parseAgentMessage(step.content)
-          return (
-            <div key={step.id} className="flex items-start gap-3">
+    <div className="bg-gradient-to-br from-slate-50 to-blue-50 border border-blue-200 rounded-xl my-3 overflow-hidden">
+      {/* Collapsible Header */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between p-3 hover:bg-blue-50 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-xs text-blue-600 font-semibold uppercase tracking-wider">
+          <Activity className="w-3.5 h-3.5" />
+          <span>Workflow Progress</span>
+          <span className="text-blue-400 font-normal normal-case">
+            ({completedSteps}/{totalSteps} steps)
+          </span>
+          {isStreaming && (
+            <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+          )}
+        </div>
+        {isExpanded ? (
+          <ChevronUp className="w-4 h-4 text-blue-500" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-blue-500" />
+        )}
+      </button>
+
+      {/* Collapsible Content */}
+      {isExpanded && (
+        <div className="px-4 pb-4 space-y-1 max-h-64 overflow-y-auto">
+          {steps.map((step, idx) => {
+            const parsed = parseAgentMessage(step.content)
+            return (
+              <div key={step.id} className="flex items-start gap-3">
               <div className="flex flex-col items-center">
                 {step.status === 'completed' ? (
                   <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
@@ -118,12 +165,13 @@ const WorkflowTimeline = ({ steps }: { steps: WorkflowStep[] }) => {
                 )}
               </div>
             </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        )}
       </div>
-    </div>
-  )
-}
+    )
+  }
 
 const ComplexityBadge = ({ complexity }: { complexity: any }) => (
   <div className="inline-flex items-center gap-3 bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-200 rounded-full px-4 py-2 my-2">
@@ -188,7 +236,7 @@ const LogDisplay = ({ logs, isExpanded, onToggle }: { logs: LogEntry[], isExpand
   )
 }
 
-export default function ChatInterface() {
+export default function ChatInterface({ onGraphDataChange, onDecisionNodesChange }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -218,6 +266,8 @@ Try describing a patient to get started!`,
   const [logsExpanded, setLogsExpanded] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const workflowStepsRef = useRef<WorkflowStep[]>([])
+  const logsRef = useRef<LogEntry[]>([])
   
   const sessionId = useRef(crypto.randomUUID()).current
 
@@ -246,6 +296,8 @@ Try describing a patient to get started!`,
     setWorkflowSteps([])
     setLogs([])
     setLogsExpanded(false)
+    workflowStepsRef.current = []
+    logsRef.current = []
 
     // Create assistant message placeholder
     const assistantId = crypto.randomUUID()
@@ -295,28 +347,36 @@ Try describing a patient to get started!`,
               console.log('[LCA] SSE Message:', data.type, '|', data.content)
 
               if (data.type === 'status') {
-                // Accumulate workflow steps
+                // Accumulate workflow steps - mark previous active steps as completed
                 setWorkflowSteps(prev => {
                   const updated = prev.map(step =>
                     step.status === 'active' ? { ...step, status: 'completed' as const } : step
                   )
-                  return [...updated, {
+                  const newSteps = [...updated, {
                     id: crypto.randomUUID(),
                     content: data.content,
                     status: 'active' as const,
                     timestamp: new Date().toLocaleTimeString()
                   }]
+                  console.log('[LCA] Workflow steps after status:', newSteps.length, '| Content:', data.content)
+                  workflowStepsRef.current = newSteps
+                  return newSteps
                 })
                 setCurrentStatus(data.content)
               } else if (data.type === 'reasoning') {
                 console.log('[LCA] Adding reasoning step:', data.content)
                 // Add reasoning step with special styling
-                setWorkflowSteps(prev => [...prev, {
-                  id: crypto.randomUUID(),
-                  content: data.content,
-                  status: 'reasoning' as const,
-                  timestamp: new Date().toLocaleTimeString()
-                }])
+                setWorkflowSteps(prev => {
+                  const newSteps = [...prev, {
+                    id: crypto.randomUUID(),
+                    content: data.content,
+                    status: 'reasoning' as const,
+                    timestamp: new Date().toLocaleTimeString()
+                  }]
+                  console.log('[LCA] Workflow steps after reasoning:', newSteps.length)
+                  workflowStepsRef.current = newSteps
+                  return newSteps
+                })
               } else if (data.type === 'progress') {
                 // Log progress to console for debugging
                 console.log('🔄 [LCA Agent Progress]:', data.content)
@@ -337,12 +397,17 @@ Try describing a patient to get started!`,
                 console.log('   └─ Status:', stepStatus, '| IsAgent:', isAgentExecution)
                 
                 // Add as step with appropriate status
-                setWorkflowSteps(prev => [...prev, {
-                  id: crypto.randomUUID(),
-                  content: data.content,
-                  status: stepStatus,
-                  timestamp: new Date().toLocaleTimeString()
-                }])
+                setWorkflowSteps(prev => {
+                  const newSteps = [...prev, {
+                    id: crypto.randomUUID(),
+                    content: data.content,
+                    status: stepStatus,
+                    timestamp: new Date().toLocaleTimeString()
+                  }]
+                  console.log('[LCA] Workflow steps after progress:', newSteps.length)
+                  workflowStepsRef.current = newSteps
+                  return newSteps
+                })
                 setCurrentStatus(data.content)
               } else if (data.type === 'patient_data') {
                 patientData = data.content
@@ -371,12 +436,73 @@ Try describing a patient to get started!`,
               } else if (data.type === 'log') {
                 // Capture log entries for display
                 console.log(`[${data.level}] ${data.timestamp}: ${data.content}`)
-                setLogs(prev => [...prev, {
-                  id: crypto.randomUUID(),
-                  content: data.content,
-                  level: data.level || 'INFO',
-                  timestamp: data.timestamp || new Date().toLocaleTimeString()
-                }])
+                setLogs(prev => {
+                  const newLogs = [...prev, {
+                    id: crypto.randomUUID(),
+                    content: data.content,
+                    level: data.level || 'INFO',
+                    timestamp: data.timestamp || new Date().toLocaleTimeString()
+                  }]
+                  logsRef.current = newLogs
+                  return newLogs
+                })
+              } else if (data.type === 'graph_data') {
+                // Graph visualization data
+                console.log('[LCA] Received graph_data:', data.content)
+                console.log('[LCA] Graph data nodes:', data.content?.nodes?.length || 0)
+                console.log('[LCA] Graph data relationships:', data.content?.relationships?.length || 0)
+                
+                // Store in message for optional inline display
+                setMessages(prev => prev.map(msg =>
+                  msg.id === assistantId
+                    ? { ...msg, graphData: data.content }
+                    : msg
+                ))
+                
+                // Notify parent component of graph data change
+                if (onGraphDataChange && data.content && data.content.nodes && data.content.relationships) {
+                  console.log('[LCA] Calling onGraphDataChange with', data.content.nodes.length, 'nodes')
+                  onGraphDataChange(data.content)
+
+                  // Extract decision nodes if present - check both labels array and properties
+                  if (onDecisionNodesChange && data.content.nodes) {
+                    const decisionNodes = data.content.nodes.filter((node: GraphNode) => {
+                      // Check labels array
+                      const hasDecisionLabel =
+                        node.labels.includes('TreatmentDecision') ||
+                        node.labels.includes('Decision') ||
+                        node.labels.includes('Inference')
+
+                      // Also check if it's a virtual decision node (has decision_type property)
+                      const hasDecisionProperties =
+                        node.properties?.decision_type === 'treatment_recommendation' ||
+                        (node.properties?.treatment !== undefined && node.labels.includes('TreatmentDecision'))
+
+                      return hasDecisionLabel || hasDecisionProperties
+                    })
+
+                    console.log('[LCA] Found', decisionNodes.length, 'decision nodes')
+                    console.log('[LCA] Decision nodes:', decisionNodes.map((n: GraphNode) => ({
+                      id: n.id,
+                      labels: n.labels,
+                      treatment: n.properties?.treatment
+                    })))
+
+                    // Always notify parent to update the decisions panel
+                    onDecisionNodesChange(decisionNodes)
+                  }
+                } else {
+                  console.warn('[LCA] graph_data is missing nodes or relationships:', data.content)
+                }
+              } else if (data.type === 'tool_use') {
+                // Tool call started
+                console.log('[LCA] Tool use:', data.name, data.input)
+              } else if (data.type === 'tool_result') {
+                // Tool call completed
+                console.log('[LCA] Tool result:', data.name, data.output)
+              } else if (data.type === 'agent_context') {
+                // Agent context for transparency
+                console.log('[LCA] Agent context:', data.context)
               }
 
               // Update assistant message with all data
@@ -407,12 +533,41 @@ Try describing a patient to get started!`,
     } finally {
       setIsStreaming(false)
       setCurrentStatus('')
-      setStreamingMessageId(null)
-
-      // Mark remaining active steps as completed
-      setWorkflowSteps(prev => prev.map(step =>
+      
+      // Mark remaining active steps as completed - use ref to get most current state
+      const finalWorkflowSteps = workflowStepsRef.current.map(step =>
         step.status === 'active' ? { ...step, status: 'completed' as const } : step
-      ))
+      )
+      const finalLogs = logsRef.current
+      
+      // Log for debugging
+      console.log('[LCA] Finalizing - workflow steps:', finalWorkflowSteps.length, 'steps')
+      console.log('[LCA] Finalizing - logs:', finalLogs.length, 'logs')
+      if (finalWorkflowSteps.length > 0) {
+        console.log('[LCA] First step:', finalWorkflowSteps[0].content)
+        console.log('[LCA] Last step:', finalWorkflowSteps[finalWorkflowSteps.length - 1].content)
+      }
+      
+      // Update workflow steps state
+      setWorkflowSteps(finalWorkflowSteps)
+      
+      // Save workflow steps and logs to message metadata before clearing streaming state
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === assistantId) {
+          console.log('[LCA] Updating message', assistantId, 'with', finalWorkflowSteps.length, 'workflow steps')
+          return {
+            ...msg,
+            metadata: {
+              ...msg.metadata,
+              workflowSteps: finalWorkflowSteps,
+              logs: finalLogs
+            }
+          }
+        }
+        return msg
+      }))
+      
+      setStreamingMessageId(null)
 
       // Add helpful message if no content was generated
       setMessages(prev => prev.map(msg => {
@@ -497,10 +652,10 @@ Try describing a patient to get started!`,
                 </div>
               )}
 
-              {/* Workflow Timeline - shown during streaming for current message */}
-              {streamingMessageId === msg.id && workflowSteps.length > 0 && (
+              {/* Workflow Timeline - shown during streaming and persisted after */}
+              {((streamingMessageId === msg.id && workflowSteps.length > 0) || (msg.metadata?.workflowSteps && msg.metadata.workflowSteps.length > 0)) && (
                 <div className="animate-fadeIn">
-                  <WorkflowTimeline steps={workflowSteps} />
+                  <WorkflowTimeline steps={streamingMessageId === msg.id ? workflowSteps : msg.metadata?.workflowSteps || []} isStreaming={streamingMessageId === msg.id && isStreaming} />
                 </div>
               )}
 
