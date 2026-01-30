@@ -9,12 +9,13 @@ Based on 2025 research on ontology reasoning with Neo4j.
 
 from neo4j import GraphDatabase
 from typing import Dict, List, Any, Optional
-import logging
 import os
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 
 class NeosemanticsTools:

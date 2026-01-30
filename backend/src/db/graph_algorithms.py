@@ -8,14 +8,15 @@ Based on 2025 research showing 5.4x-48.4x performance improvements
 from neo4j import GraphDatabase
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
-import logging
 import os
 import numpy as np
 
-from .models import PatientFact, SimilarPatient
+# Centralized logging
+from ..logging_config import get_logger, log_execution
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+from .models import PatientFact, SimilarPatient
 
 
 class Neo4jGraphAlgorithms:

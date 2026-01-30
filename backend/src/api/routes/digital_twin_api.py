@@ -9,6 +9,11 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 from ...digital_twin import (
     DigitalTwinEngine,
     UpdateType,

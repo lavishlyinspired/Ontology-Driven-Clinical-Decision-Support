@@ -12,6 +12,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class PatientData(BaseModel):
     """Structured patient data schema."""

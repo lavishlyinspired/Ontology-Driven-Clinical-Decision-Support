@@ -9,6 +9,11 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/v1/patients", tags=["Patient Similarity"])
 
 

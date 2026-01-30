@@ -12,6 +12,9 @@ langchain-community
 langchain-core
 langgraph
 
+# LangSmith Tracing & Observability
+langsmith
+
 # Ollama Integration
 ollama
 langchain-ollama

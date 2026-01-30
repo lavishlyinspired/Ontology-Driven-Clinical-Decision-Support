@@ -17,6 +17,11 @@ from datetime import datetime
 import tempfile
 from pathlib import Path
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 from ..services.conversation_service import ConversationService
 from ..services.lca_service import LungCancerAssistantService
 from ..services.file_processor import FileProcessor, ClinicalNoteParser

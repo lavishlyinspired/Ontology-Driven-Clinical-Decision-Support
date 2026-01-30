@@ -11,6 +11,12 @@ from pathlib import Path
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent / "backend"))
 
+# Centralized logging
+from src.logging_config import get_logger, setup_logging
+
+setup_logging()
+logger = get_logger(__name__)
+
 from src.services.lca_service import LungCancerAssistantService
 
 

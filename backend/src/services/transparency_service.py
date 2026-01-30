@@ -11,6 +11,11 @@ from datetime import datetime
 from enum import Enum
 import json
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class AgentStatus(Enum):
     """Agent execution status."""

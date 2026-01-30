@@ -14,13 +14,14 @@ NEVER: Direct Neo4j writes
 """
 
 from typing import Dict, Any, Optional, Tuple, List
-import logging
+
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
+
+logger = get_logger(__name__)
 
 from ..db.models import PatientFact, PatientFactWithCodes
 from ..ontology.snomed_loader import SNOMEDLoader
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class SemanticMappingAgent:

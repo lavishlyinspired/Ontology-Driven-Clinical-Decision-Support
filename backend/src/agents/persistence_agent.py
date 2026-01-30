@@ -16,9 +16,13 @@ EXCLUSIVE: Only agent with Neo4j write access
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-import logging
 import hashlib
 import json
+
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
+
+logger = get_logger(__name__)
 
 from ..db.models import (
     PatientFactWithCodes,
@@ -28,9 +32,6 @@ from ..db.models import (
     InferenceStatus
 )
 from ..db.neo4j_tools import Neo4jWriteTools
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Try to import sentence_transformers for embeddings
 try:

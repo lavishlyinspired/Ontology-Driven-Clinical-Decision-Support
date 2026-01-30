@@ -8,13 +8,14 @@ LOINC Ontology 2.0: 41,000+ concepts covering 70% of top 20,000 LOINC codes.
 """
 
 from typing import Dict, List, Any, Optional, Tuple
-import logging
 import os
 import requests
 from dataclasses import dataclass
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 
 @dataclass

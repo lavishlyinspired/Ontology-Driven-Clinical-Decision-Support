@@ -8,16 +8,17 @@ import types
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from owlready2 import *
-import logging
+
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 try:
     from ..config import LCAConfig
 except (ImportError, ValueError):
     # Fallback if config module not available
     LCAConfig = None
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class SNOMEDLoader:

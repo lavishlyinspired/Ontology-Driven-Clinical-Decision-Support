@@ -10,6 +10,11 @@ from datetime import datetime
 from pydantic import BaseModel
 import numpy as np
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class GuidelineChunk(BaseModel):
     """A chunk of guideline text with embeddings."""

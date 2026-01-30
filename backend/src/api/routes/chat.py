@@ -7,14 +7,15 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
-import logging
-
 import os
+
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 from ...services.conversation_service import ConversationService
 from ...services.lca_service import LungCancerAssistantService
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 

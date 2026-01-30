@@ -12,6 +12,11 @@ from pydantic import BaseModel
 import json
 import asyncio
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class WebSocketMessage(BaseModel):
     """WebSocket message format."""

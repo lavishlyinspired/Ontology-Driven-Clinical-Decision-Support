@@ -8,12 +8,16 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 import asyncio
 import uuid
-import logging
 import sys
 from pathlib import Path
 
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Centralized logging
+from src.logging_config import get_logger, log_execution, log_patient_event
+
+logger = get_logger(__name__)
 
 from src.agents.lca_agents import create_lca_workflow, PatientState
 from src.agents.integrated_workflow import IntegratedLCAWorkflow
@@ -24,9 +28,6 @@ from src.db.neo4j_schema import LUCADAGraphDB, Neo4jConfig
 # Lazy import for vector store to avoid loading PyTorch unless needed
 # from src.db.vector_store import LUCADAVectorStore
 from src.db.provenance_tracker import ProvenanceTracker, get_provenance_tracker
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 @dataclass

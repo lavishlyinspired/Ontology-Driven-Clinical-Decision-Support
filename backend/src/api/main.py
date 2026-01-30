@@ -27,12 +27,21 @@ import json
 import time
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
-# Configure structured logging
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# Add parent to path first (needed for imports)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Import and initialize centralized logging
+from src.logging_config import setup_logging, get_logger, log_execution
+
+# Initialize logging with file output enabled
+setup_logging(
+    log_level=os.getenv("LOG_LEVEL", "INFO"),
+    enable_json=os.getenv("LOG_ENABLE_JSON", "false").lower() == "true",
+    enable_file_logging=os.getenv("LOG_ENABLE_FILE", "true").lower() == "true",
+    enable_langsmith=True
 )
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 # Prometheus metrics (optional)
 REQUEST_COUNT = Counter(
@@ -45,9 +54,6 @@ REQUEST_LATENCY = Histogram(
     'HTTP request latency',
     ['method', 'endpoint']
 )
-
-# Add parent to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.services.lca_service import LungCancerAssistantService, TreatmentRecommendation
 from src.agents.lca_workflow import LCAWorkflow, analyze_patient as workflow_analyze

@@ -12,7 +12,10 @@ import asyncio
 
 from pydantic import BaseModel, Field, field_validator
 
-logger = logging.getLogger(__name__)
+# Centralized logging
+from ..logging_config import get_logger, log_execution, create_sse_log_handler
+
+logger = get_logger(__name__)
 
 
 # --- Pydantic model for validated patient data extraction ---
@@ -303,60 +306,102 @@ class ConversationService:
                 "content": f"📊 **Agent Pipeline:** {' → '.join(base_agents[:4])}..."
             })
 
-            # Create async queue for real-time progress streaming
-            import asyncio
+            # Create async queues for real-time streaming
             progress_queue = asyncio.Queue()
+            log_queue = asyncio.Queue(maxsize=100)  # Limit to prevent memory issues
 
             async def stream_progress(message: str):
                 """Stream progress messages in real-time"""
-                await progress_queue.put(message)
+                await progress_queue.put(("progress", message))
 
-            # Start processing in background
-            import concurrent.futures
-            loop = asyncio.get_event_loop()
+            # Install log capture handler
+            log_handler = create_sse_log_handler(level=logging.INFO)
+            log_handler.install(log_queue)
 
-            # Execute with streaming updates and AI workflow enabled
-            processing_task = asyncio.create_task(
-                self.lca_service.process_patient(
-                    patient_data=patient_data,
-                    use_ai_workflow=True,
-                    force_advanced=use_advanced,
-                    progress_callback=stream_progress
+            try:
+                # Execute with streaming updates and AI workflow enabled
+                processing_task = asyncio.create_task(
+                    self.lca_service.process_patient(
+                        patient_data=patient_data,
+                        use_ai_workflow=True,
+                        force_advanced=use_advanced,
+                        progress_callback=stream_progress
+                    )
                 )
-            )
 
-            # Stream progress as it comes in (with timeout)
-            start_time = datetime.now()
-            streamed_progress = 0
-            while not processing_task.done():
-                try:
-                    msg = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
-                    streamed_progress += 1
-                    yield self._format_sse({
-                        "type": "progress",
-                        "content": f"[Agent {streamed_progress}] {msg}"
-                    })
-                except asyncio.TimeoutError:
-                    # Check if still processing
+                # Stream progress and logs as they come in
+                start_time = datetime.now()
+                streamed_count = 0
+                last_log_time = start_time
+
+                while not processing_task.done():
+                    # Check for progress messages
+                    try:
+                        msg_type, msg = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
+                        streamed_count += 1
+                        yield self._format_sse({
+                            "type": "progress",
+                            "content": f"[Step {streamed_count}] {msg}"
+                        })
+                    except asyncio.TimeoutError:
+                        pass
+
+                    # Check for log entries
+                    try:
+                        while not log_queue.empty():
+                            log_entry = log_queue.get_nowait()
+                            # Format log for display
+                            log_msg = f"[{log_entry['level']}] {log_entry['logger']}: {log_entry['message']}"
+                            if log_entry.get('agent'):
+                                log_msg = f"[{log_entry['agent']}] {log_entry['message']}"
+                            if log_entry.get('duration_ms'):
+                                log_msg += f" ({log_entry['duration_ms']}ms)"
+
+                            yield self._format_sse({
+                                "type": "log",
+                                "content": log_msg,
+                                "level": log_entry['level'],
+                                "timestamp": log_entry['timestamp']
+                            })
+                            last_log_time = datetime.now()
+                    except Exception:
+                        pass
+
+                    # Show elapsed time if no activity
                     elapsed = (datetime.now() - start_time).total_seconds()
-                    if elapsed > 2 and streamed_progress == 0:
+                    log_silence = (datetime.now() - last_log_time).total_seconds()
+                    if elapsed > 3 and log_silence > 2 and streamed_count == 0:
                         yield self._format_sse({
                             "type": "reasoning",
-                            "content": f"⏳ Processing ({int(elapsed)}s elapsed)... executing guideline matching"
+                            "content": f"⏳ Processing ({int(elapsed)}s elapsed)... orchestrating agents"
                         })
-                    continue
+                        last_log_time = datetime.now()  # Reset to avoid spam
 
-            # Get result
-            result = await processing_task
+                # Get result
+                result = await processing_task
 
-            # Stream any remaining progress messages
-            while not progress_queue.empty():
-                msg = await progress_queue.get()
-                streamed_progress += 1
-                yield self._format_sse({
-                    "type": "progress",
-                    "content": f"[Agent {streamed_progress}] {msg}"
-                })
+                # Stream any remaining items
+                while not progress_queue.empty():
+                    msg_type, msg = await progress_queue.get()
+                    streamed_count += 1
+                    yield self._format_sse({
+                        "type": "progress",
+                        "content": f"[Step {streamed_count}] {msg}"
+                    })
+
+                while not log_queue.empty():
+                    log_entry = log_queue.get_nowait()
+                    log_msg = f"[{log_entry['level']}] {log_entry['logger']}: {log_entry['message']}"
+                    yield self._format_sse({
+                        "type": "log",
+                        "content": log_msg,
+                        "level": log_entry['level'],
+                        "timestamp": log_entry['timestamp']
+                    })
+
+            finally:
+                # Always uninstall handler
+                log_handler.uninstall()
 
             # Show matched rules summary
             if result.recommendations:

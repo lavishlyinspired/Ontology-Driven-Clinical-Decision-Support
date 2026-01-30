@@ -12,17 +12,18 @@ CRITICAL:
 from neo4j import GraphDatabase
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-import logging
 import os
 import uuid
+
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 from .models import (
     PatientFact, PatientFactWithCodes, InferenceRecord, WriteReceipt,
     SimilarPatient, CohortStats, InferenceStatus
 )
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class Neo4jReadTools:

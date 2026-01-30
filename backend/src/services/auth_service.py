@@ -13,6 +13,11 @@ from pydantic import BaseModel, EmailStr
 from enum import Enum
 import secrets
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 # Configuration
 SECRET_KEY = secrets.token_urlsafe(32)  # Generate secure secret key

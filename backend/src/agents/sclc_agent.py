@@ -9,6 +9,11 @@ from typing import Dict, Any
 from dataclasses import dataclass
 from enum import Enum
 
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
+
+logger = get_logger(__name__)
+
 
 class SCLCStage(Enum):
     """SCLC staging system (Limited vs Extensive)"""

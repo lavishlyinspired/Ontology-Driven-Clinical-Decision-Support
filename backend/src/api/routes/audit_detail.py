@@ -10,6 +10,11 @@ from datetime import datetime, date
 from enum import Enum
 import os
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/v1/audit", tags=["Audit & Compliance"])
 
 

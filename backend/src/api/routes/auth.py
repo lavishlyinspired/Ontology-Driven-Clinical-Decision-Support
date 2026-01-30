@@ -9,6 +9,11 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 from src.services.auth_service import auth_service
 from src.services.audit_service import audit_logger
 

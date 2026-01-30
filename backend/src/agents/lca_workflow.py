@@ -12,8 +12,12 @@ CRITICAL PRINCIPLE: "Neo4j as a tool, not a brain"
 
 from typing import Dict, Any, Optional, TypedDict, List, Annotated
 from datetime import datetime
-import logging
 import operator
+
+# Centralized logging
+from ..logging_config import get_logger, log_execution, log_workflow_event
+
+logger = get_logger(__name__)
 
 # LangGraph imports
 try:
@@ -43,9 +47,6 @@ from ..db.models import (
     DecisionSupportResponse
 )
 from ..db.neo4j_tools import Neo4jReadTools, Neo4jWriteTools
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class WorkflowState(TypedDict):

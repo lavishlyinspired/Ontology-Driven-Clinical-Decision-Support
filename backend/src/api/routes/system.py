@@ -10,6 +10,11 @@ from datetime import datetime
 import os
 import sys
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 router = APIRouter(tags=["System"])
 
 

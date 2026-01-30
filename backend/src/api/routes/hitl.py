@@ -9,6 +9,11 @@ from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 from src.services.hitl_service import hitl_service, ReviewStatus
 from src.services.audit_service import audit_logger
 from src.api.routes.auth import get_current_active_user

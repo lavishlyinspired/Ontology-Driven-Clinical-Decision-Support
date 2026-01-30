@@ -10,6 +10,11 @@ from datetime import datetime
 from io import BytesIO
 import json
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter, A4

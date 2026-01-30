@@ -17,3 +17,8 @@ docs/
 node_modules
 notes.txt
 
+# Logs - keep directory but ignore log files
+logs/*.log
+logs/*.json
+!logs/.gitkeep
+

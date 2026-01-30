@@ -9,13 +9,14 @@ reduction in system deadlocks with robust negotiation protocols.
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
 from datetime import datetime
 
-from ..db.models import ClassificationResult, TreatmentRecommendation, EvidenceLevel, TreatmentIntent
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+from ..db.models import ClassificationResult, TreatmentRecommendation, EvidenceLevel, TreatmentIntent
 
 
 class NegotiationStrategy(Enum):

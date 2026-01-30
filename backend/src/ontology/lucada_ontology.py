@@ -8,12 +8,13 @@ import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime as py_datetime
 from owlready2 import *
-import logging
+
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 from .snomed_loader import SNOMEDLoader
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class LUCADAOntology:

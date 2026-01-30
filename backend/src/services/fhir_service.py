@@ -11,6 +11,11 @@ from pydantic import BaseModel
 from enum import Enum
 import json
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class FHIRResourceType(str, Enum):
     """FHIR R4 resource types."""

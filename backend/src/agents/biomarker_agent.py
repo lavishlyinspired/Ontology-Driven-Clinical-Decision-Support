@@ -8,14 +8,15 @@ Implements precision medicine guidelines from NCCN, ASCO, ESMO 2025.
 """
 
 from typing import Optional, List, Dict, Any
-import logging
 from dataclasses import dataclass
+
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
+
+logger = get_logger(__name__)
 
 from ..db.models import PatientFactWithCodes, ClassificationResult, TreatmentRecommendation, EvidenceLevel, TreatmentIntent
 from .negotiation_protocol import AgentProposal
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 @dataclass

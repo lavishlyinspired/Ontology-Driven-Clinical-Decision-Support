@@ -7,6 +7,11 @@ For SNOMED-CT code mappings, use SNOMEDLoader.
 
 from typing import Dict, Optional
 
+# Centralized logging
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class ClinicalMappings:
     """Centralized clinical mappings for non-SNOMED concepts"""

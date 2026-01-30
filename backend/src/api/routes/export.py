@@ -12,6 +12,11 @@ import io
 import json
 import csv
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/v1/export", tags=["Export"])
 
 

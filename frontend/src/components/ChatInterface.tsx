@@ -32,6 +32,13 @@ interface WorkflowStep {
   timestamp: string
 }
 
+interface LogEntry {
+  id: string
+  content: string
+  level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR'
+  timestamp: string
+}
+
 const JSONDisplay = ({ data }: { data: any }) => (
   <div className="bg-slate-800 rounded-xl p-4 overflow-x-auto my-3">
     <div className="flex items-center gap-2 mb-2 text-slate-400 text-xs">
@@ -137,6 +144,50 @@ const ComplexityBadge = ({ complexity }: { complexity: any }) => (
   </div>
 )
 
+const LogDisplay = ({ logs, isExpanded, onToggle }: { logs: LogEntry[], isExpanded: boolean, onToggle: () => void }) => {
+  if (logs.length === 0) return null
+
+  const getLevelColor = (level: string) => {
+    switch (level) {
+      case 'DEBUG': return 'text-gray-400'
+      case 'INFO': return 'text-cyan-400'
+      case 'WARNING': return 'text-yellow-400'
+      case 'ERROR': return 'text-red-400'
+      default: return 'text-gray-300'
+    }
+  }
+
+  return (
+    <div className="bg-slate-900 rounded-xl my-3 overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-3 text-slate-300 hover:bg-slate-800 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Agent & Workflow Logs ({logs.length})</span>
+        </div>
+        <span className="text-xs text-slate-500">
+          {isExpanded ? '▼ Hide' : '▶ Show'}
+        </span>
+      </button>
+      {isExpanded && (
+        <div className="max-h-64 overflow-y-auto p-3 pt-0 space-y-1 font-mono text-xs">
+          {logs.map((log) => (
+            <div key={log.id} className="flex gap-2">
+              <span className="text-slate-500 flex-shrink-0">{log.timestamp}</span>
+              <span className={`flex-shrink-0 w-16 ${getLevelColor(log.level)}`}>
+                [{log.level}]
+              </span>
+              <span className="text-slate-300 break-all">{log.content}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -163,6 +214,8 @@ Try describing a patient to get started!`,
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([])
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [logsExpanded, setLogsExpanded] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   
@@ -191,6 +244,8 @@ Try describing a patient to get started!`,
     setCurrentPatientData(null)
     setSuggestions([])
     setWorkflowSteps([])
+    setLogs([])
+    setLogsExpanded(false)
 
     // Create assistant message placeholder
     const assistantId = crypto.randomUUID()
@@ -313,6 +368,15 @@ Try describing a patient to get started!`,
                   status: 'error' as const,
                   timestamp: new Date().toLocaleTimeString()
                 }])
+              } else if (data.type === 'log') {
+                // Capture log entries for display
+                console.log(`[${data.level}] ${data.timestamp}: ${data.content}`)
+                setLogs(prev => [...prev, {
+                  id: crypto.randomUUID(),
+                  content: data.content,
+                  level: data.level || 'INFO',
+                  timestamp: data.timestamp || new Date().toLocaleTimeString()
+                }])
               }
 
               // Update assistant message with all data
@@ -371,6 +435,8 @@ Try describing a patient to get started!`,
     setMessages([messages[0]]) // Keep welcome message
     setSuggestions([])
     setWorkflowSteps([])
+    setLogs([])
+    setLogsExpanded(false)
     setCurrentComplexity(null)
     setCurrentPatientData(null)
   }
@@ -435,6 +501,17 @@ Try describing a patient to get started!`,
               {streamingMessageId === msg.id && workflowSteps.length > 0 && (
                 <div className="animate-fadeIn">
                   <WorkflowTimeline steps={workflowSteps} />
+                </div>
+              )}
+
+              {/* Log Display - shown during streaming for current message */}
+              {streamingMessageId === msg.id && logs.length > 0 && (
+                <div className="animate-fadeIn">
+                  <LogDisplay
+                    logs={logs}
+                    isExpanded={logsExpanded}
+                    onToggle={() => setLogsExpanded(!logsExpanded)}
+                  />
                 </div>
               )}
 

@@ -10,6 +10,11 @@ from datetime import datetime, timedelta
 import numpy as np
 from pydantic import BaseModel
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class SurvivalPrediction(BaseModel):
     """Survival prediction with confidence intervals."""

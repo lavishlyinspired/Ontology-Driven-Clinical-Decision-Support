@@ -8,9 +8,11 @@ import types
 from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
 from owlready2 import *
-import logging
 
-logger = logging.getLogger(__name__)
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 
 @dataclass

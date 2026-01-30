@@ -15,6 +15,11 @@ import json
 import asyncio
 from collections import OrderedDict
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class LRUCache:
     """In-memory LRU cache for frequently accessed data."""

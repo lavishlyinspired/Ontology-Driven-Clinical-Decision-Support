@@ -11,6 +11,11 @@ from enum import Enum
 from pydantic import BaseModel
 import asyncio
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class ReviewStatus(str, Enum):
     """Status of review cases."""

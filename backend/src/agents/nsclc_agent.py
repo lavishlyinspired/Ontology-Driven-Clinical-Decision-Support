@@ -9,6 +9,11 @@ from typing import List, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
 
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
+
+logger = get_logger(__name__)
+
 from .classification_agent import ClassificationAgent
 from ..ontology.guideline_rules import GuidelineRule
 

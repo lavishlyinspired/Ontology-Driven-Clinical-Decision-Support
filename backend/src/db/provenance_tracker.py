@@ -18,9 +18,11 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 import hashlib
 import json
-import logging
 
-logger = logging.getLogger(__name__)
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 
 class ProvenanceType(Enum):

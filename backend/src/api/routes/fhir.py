@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 from ..services.fhir_service import fhir_service
 from ..agents.integrated_workflow import analyze_patient_comprehensive
 from ..services.audit_service import audit_logger, AuditAction

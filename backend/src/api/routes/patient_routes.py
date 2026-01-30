@@ -7,12 +7,14 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-import logging
 import os
 
-from ...db.neo4j_tools import Neo4jTools
+# Centralized logging
+from ...logging_config import get_logger, log_execution
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+from ...db.neo4j_tools import Neo4jTools
 
 router = APIRouter(prefix="/api/v1/patients", tags=["Patients"])
 

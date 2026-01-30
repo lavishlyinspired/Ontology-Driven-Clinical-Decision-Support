@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 from src.services.version_service import version_service
 from src.services.audit_service import audit_logger
 from src.api.routes.auth import get_current_active_user

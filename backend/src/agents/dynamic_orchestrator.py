@@ -16,7 +16,6 @@ Features:
 """
 
 import asyncio
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -26,7 +25,10 @@ import networkx as nx
 
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+# Centralized logging
+from ..logging_config import get_logger, log_execution, log_workflow_event
+
+logger = get_logger(__name__)
 
 
 class WorkflowComplexity(Enum):

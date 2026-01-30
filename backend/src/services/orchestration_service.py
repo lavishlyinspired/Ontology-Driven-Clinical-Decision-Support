@@ -7,8 +7,12 @@ Per PHASE 6 of final.md specification.
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-import logging
 import asyncio
+
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
 
 from ..agents.lca_workflow import LCAWorkflow, analyze_patient
 from ..agents.ingestion_agent import IngestionAgent
@@ -30,9 +34,6 @@ from ..db.neo4j_tools import Neo4jReadTools, Neo4jWriteTools
 
 from ..ontology.lucada_ontology import LUCADAOntology
 from ..ontology.guideline_rules import GuidelineRuleEngine
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class LungCancerAssistantService:

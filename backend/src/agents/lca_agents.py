@@ -12,10 +12,11 @@ from typing import TypedDict, Annotated, Sequence, Dict, Any, List
 from pydantic import BaseModel, Field
 import operator
 import os
-import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
+
+logger = get_logger(__name__)
 
 
 # ========================================

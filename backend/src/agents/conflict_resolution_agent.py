@@ -15,7 +15,11 @@ NEVER: Direct Neo4j writes
 
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
-import logging
+
+# Centralized logging
+from ..logging_config import get_logger, log_agent_action
+
+logger = get_logger(__name__)
 
 from ..db.models import (
     ClassificationResult,
@@ -23,9 +27,6 @@ from ..db.models import (
     EvidenceLevel,
     TreatmentIntent
 )
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 @dataclass

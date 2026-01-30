@@ -13,6 +13,11 @@ import PyPDF2
 import docx
 from io import BytesIO
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class FileProcessor:
     """Process medical documents (PDF, DOCX, TXT) and extract patient data."""

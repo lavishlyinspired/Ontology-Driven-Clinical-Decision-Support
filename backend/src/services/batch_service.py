@@ -12,6 +12,11 @@ from pydantic import BaseModel
 import uuid
 import json
 
+# Centralized logging
+from ..logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 
 class TaskStatus(str, Enum):
     """Status of a batch task."""

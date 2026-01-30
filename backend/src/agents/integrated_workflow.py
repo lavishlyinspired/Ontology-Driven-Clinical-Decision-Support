@@ -15,9 +15,13 @@ This module provides the complete integrated workflow combining:
 """
 
 import asyncio
-import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+
+# Centralized logging
+from ..logging_config import get_logger, log_execution, log_workflow_event
+
+logger = get_logger(__name__)
 
 from .dynamic_orchestrator import (
     DynamicWorkflowOrchestrator,
@@ -51,8 +55,6 @@ TemporalAnalyzer = None
 # Ontology Integrators - lazy loaded
 LOINCIntegrator = None
 RxNormMapper = None
-
-logger = logging.getLogger(__name__)
 
 
 class IntegratedLCAWorkflow:

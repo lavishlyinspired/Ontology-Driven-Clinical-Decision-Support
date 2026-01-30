@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
+# Centralized logging
+from ...logging_config import get_logger, log_execution
+
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/api/v1/biomarkers", tags=["Biomarker Analysis"])
 
 
