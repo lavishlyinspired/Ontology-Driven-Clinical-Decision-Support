@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Treatment Comparison</title>
+  <style>
+    :root {
+      --color-bg: #0f0f14;
+      --color-surface: #1a1a24;
+      --color-elevated: #242430;
+      --color-text: #f4f4f5;
+      --color-text-muted: #a1a1aa;
+      --color-accent: #7c3aed;
+      --color-success: #22c55e;
+      --color-warning: #f59e0b;
+      --color-border: #374151;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    .comparison-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .header h2 {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header h2::before {
+      content: '📊';
+    }
+
+    .patient-context {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      background: var(--color-surface);
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+
+    .treatments-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .treatment-card {
+      background: var(--color-surface);
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid var(--color-border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .treatment-card:hover {
+      border-color: var(--color-accent);
+      transform: translateY(-2px);
+    }
+
+    .treatment-card.selected {
+      border-color: var(--color-accent);
+      background: rgba(124, 58, 237, 0.1);
+    }
+
+    .treatment-card .name {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: var(--color-accent);
+    }
+
+    .treatment-card .evidence {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--color-elevated);
+      color: var(--color-text-muted);
+      margin-bottom: 12px;
+    }
+
+    .treatment-card .evidence.grade-a {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--color-success);
+    }
+
+    .treatment-card .evidence.grade-b {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--color-warning);
+    }
+
+    .metrics {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .metric .label {
+      color: var(--color-text-muted);
+    }
+
+    .metric .value {
+      font-weight: 500;
+    }
+
+    .metric .value.positive {
+      color: var(--color-success);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: var(--color-accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #6d28d9;
+    }
+
+    .btn-secondary {
+      background: var(--color-elevated);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-surface);
+    }
+
+    .guideline-ref {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--color-text-muted);
+    }
+
+    .loading::before {
+      content: '';
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--color-border);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 12px;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .comparison-table th {
+      background: var(--color-surface);
+      font-weight: 600;
+      color: var(--color-text-muted);
+    }
+
+    .comparison-table tr:hover {
+      background: var(--color-surface);
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="comparison-container">
+    <div class="loading">Loading treatment data...</div>
+  </div>
+
+  <script>
+    // MCP App - Treatment Comparison
+    (function() {
+      const app = document.getElementById('app');
+      let treatments = [];
+      let selectedTreatment = null;
+      let patientContext = {};
+
+      // Listen for messages from host
+      window.addEventListener('message', (event) => {
+        const data = event.data;
+        if (!data || typeof data !== 'object') return;
+
+        console.log('[TreatmentCompare] Received:', data.method || 'response');
+
+        if (data.method === 'ui/notifications/tool-input') {
+          handleToolInput(data.params);
+        } else if (data.method === 'ui/notifications/tool-result') {
+          handleToolResult(data.params);
+        }
+      });
+
+      // Send initialize message to host
+      function initialize() {
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id: 'init-1',
+          method: 'ui/initialize',
+          params: {
+            appInfo: { name: 'Treatment Comparison', version: '1.0.0' },
+            capabilities: { tools: true, messages: true }
+          }
+        }, '*');
+      }
+
+      // Handle tool input (initial arguments)
+      function handleToolInput(params) {
+        console.log('[TreatmentCompare] Tool input:', params);
+        if (params && params.arguments) {
+          patientContext = params.arguments.patient || params.arguments;
+          if (params.arguments.treatments) {
+            treatments = params.arguments.treatments;
+          }
+          render();
+        }
+      }
+
+      // Handle tool result (comparison data)
+      function handleToolResult(params) {
+        console.log('[TreatmentCompare] Tool result:', params);
+        if (params && params.structuredContent) {
+          const data = params.structuredContent;
+          if (data.treatments) {
+            treatments = data.treatments;
+          }
+          if (data.patient) {
+            patientContext = data.patient;
+          }
+          render();
+        }
+      }
+
+      // Render the comparison UI
+      function render() {
+        // Default treatments if none provided
+        if (treatments.length === 0) {
+          treatments = [
+            {
+              name: 'Pembrolizumab + Platinum Doublet',
+              evidence_level: 'Grade A',
+              orr: '47%',
+              pfs: '10.3 months',
+              os: '22.0 months',
+              guideline: 'NCCN NSCLC 2025, KEYNOTE-189',
+              confidence: 0.92
+            },
+            {
+              name: 'Durvalumab Consolidation',
+              evidence_level: 'Grade A',
+              orr: '28%',
+              pfs: '16.8 months',
+              os: '47.5 months',
+              guideline: 'PACIFIC Trial',
+              confidence: 0.85
+            },
+            {
+              name: 'Osimertinib (EGFR+)',
+              evidence_level: 'Grade A',
+              orr: '77%',
+              pfs: '18.9 months',
+              os: '38.6 months',
+              guideline: 'FLAURA Trial',
+              confidence: 0.95,
+              biomarker_required: 'EGFR mutation'
+            }
+          ];
+        }
+
+        const patientInfo = patientContext.stage || patientContext.tnm_stage
+          ? `Stage ${patientContext.stage || patientContext.tnm_stage} | ${patientContext.histology || patientContext.histology_type || 'NSCLC'} | PS ${patientContext.performance_status || '1'}`
+          : 'Patient context not available';
+
+        app.innerHTML = `
+          <div class="header">
+            <h2>Treatment Comparison</h2>
+          </div>
+
+          <div class="patient-context">
+            🧑‍⚕️ ${patientInfo}
+          </div>
+
+          <div class="treatments-grid">
+            ${treatments.map((t, i) => `
+              <div class="treatment-card ${selectedTreatment === i ? 'selected' : ''}" onclick="selectTreatment(${i})">
+                <div class="name">${t.name}</div>
+                <span class="evidence ${t.evidence_level?.toLowerCase().replace(' ', '-')}">${t.evidence_level || 'Grade B'}</span>
+                ${t.biomarker_required ? `<span class="evidence" style="margin-left: 4px;">🧬 ${t.biomarker_required}</span>` : ''}
+                <div class="metrics">
+                  <div class="metric">
+                    <span class="label">ORR</span>
+                    <span class="value positive">${t.orr || 'N/A'}</span>
+                  </div>
+                  <div class="metric">
+                    <span class="label">PFS</span>
+                    <span class="value">${t.pfs || 'N/A'}</span>
+                  </div>
+                  <div class="metric">
+                    <span class="label">OS</span>
+                    <span class="value">${t.os || 'N/A'}</span>
+                  </div>
+                  <div class="metric">
+                    <span class="label">Confidence</span>
+                    <span class="value">${Math.round((t.confidence || 0.8) * 100)}%</span>
+                  </div>
+                </div>
+                <div class="guideline-ref">📋 ${t.guideline || 'NCCN Guidelines'}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-secondary" onclick="showSurvivalCurves()">
+              📈 Survival Curves
+            </button>
+            <button class="btn btn-secondary" onclick="showGuidelines()">
+              📋 View Guidelines
+            </button>
+            <button class="btn btn-primary" onclick="selectAndApply()">
+              ✓ Apply Selection
+            </button>
+          </div>
+        `;
+      }
+
+      // Select a treatment
+      window.selectTreatment = function(index) {
+        selectedTreatment = index;
+        render();
+      };
+
+      // Show survival curves (send message to chat)
+      window.showSurvivalCurves = function() {
+        const treatment = selectedTreatment !== null ? treatments[selectedTreatment] : treatments[0];
+        sendMessage(`Show survival curves for ${treatment.name}`);
+      };
+
+      // Show guidelines
+      window.showGuidelines = function() {
+        const treatment = selectedTreatment !== null ? treatments[selectedTreatment] : treatments[0];
+        sendMessage(`Show guideline details for ${treatment.guideline}`);
+      };
+
+      // Apply selection
+      window.selectAndApply = function() {
+        if (selectedTreatment === null) {
+          selectedTreatment = 0;
+        }
+        const treatment = treatments[selectedTreatment];
+        sendMessage(`I'll proceed with ${treatment.name} as the recommended treatment based on ${treatment.evidence_level} evidence from ${treatment.guideline}.`);
+      };
+
+      // Send message to chat
+      function sendMessage(text) {
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id: `msg-${Date.now()}`,
+          method: 'ui/message',
+          params: { content: text }
+        }, '*');
+      }
+
+      // Initialize on load
+      initialize();
+
+      // Render default state after a brief delay
+      setTimeout(() => {
+        if (treatments.length === 0) {
+          render();
+        }
+      }, 500);
+    })();
+  </script>
+</body>
+</html>

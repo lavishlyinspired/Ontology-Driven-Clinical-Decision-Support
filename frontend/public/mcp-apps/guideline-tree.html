@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guideline Explorer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d0d12;
+      color: #e4e4e7;
+      padding: 16px;
+      min-height: 100vh;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #27272a;
+    }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fafafa;
+    }
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .source-badge {
+      background: #1e1b4b;
+      color: #a78bfa;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      margin-left: auto;
+    }
+    .guideline-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      overflow-x: auto;
+    }
+    .tab {
+      background: #18181b;
+      border: 1px solid #27272a;
+      color: #a1a1aa;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .tab:hover { border-color: #3f3f46; }
+    .tab.active {
+      background: #7c3aed;
+      border-color: #7c3aed;
+      color: white;
+    }
+    .tree-container {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .tree-node {
+      margin-left: 20px;
+      position: relative;
+    }
+    .tree-node::before {
+      content: '';
+      position: absolute;
+      left: -16px;
+      top: 0;
+      height: 100%;
+      width: 1px;
+      background: #27272a;
+    }
+    .tree-node:last-child::before {
+      height: 14px;
+    }
+    .tree-node::after {
+      content: '';
+      position: absolute;
+      left: -16px;
+      top: 14px;
+      width: 12px;
+      height: 1px;
+      background: #27272a;
+    }
+    .node-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 0;
+      cursor: pointer;
+    }
+    .node-toggle {
+      width: 20px;
+      height: 20px;
+      background: #27272a;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #71717a;
+      font-size: 12px;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .node-toggle:hover { background: #3f3f46; }
+    .node-toggle.expanded { transform: rotate(90deg); }
+    .node-content {
+      flex: 1;
+    }
+    .node-label {
+      font-size: 14px;
+      color: #fafafa;
+      margin-bottom: 4px;
+    }
+    .node-meta {
+      font-size: 12px;
+      color: #71717a;
+    }
+    .node-type {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+      margin-right: 8px;
+    }
+    .node-type.decision { background: #1e3a5f; color: #60a5fa; }
+    .node-type.treatment { background: #1e1b4b; color: #a78bfa; }
+    .node-type.condition { background: #14532d; color: #4ade80; }
+    .node-type.test { background: #422006; color: #fbbf24; }
+    .node-children { display: none; }
+    .node-children.expanded { display: block; }
+    .evidence-badge {
+      background: #14532d;
+      color: #4ade80;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      margin-left: 8px;
+    }
+    .recommendation-box {
+      background: #1e1b4b;
+      border: 1px solid #4c1d95;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+    }
+    .recommendation-box h3 {
+      color: #a78bfa;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .recommendation-box p {
+      color: #d4d4d8;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #7c3aed;
+      color: white;
+    }
+    .btn-primary:hover { background: #6d28d9; }
+    .btn-secondary {
+      background: #27272a;
+      color: #e4e4e7;
+      border: 1px solid #3f3f46;
+    }
+    .btn-secondary:hover { background: #3f3f46; }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #71717a;
+    }
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #27272a;
+      border-top-color: #7c3aed;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <h1>Guideline Decision Tree</h1>
+    <span class="source-badge">NCCN 2024</span>
+  </div>
+
+  <div class="guideline-tabs">
+    <button class="tab active" data-guideline="nsclc">NSCLC</button>
+    <button class="tab" data-guideline="sclc">SCLC</button>
+    <button class="tab" data-guideline="biomarker">Biomarker Testing</button>
+    <button class="tab" data-guideline="staging">Staging</button>
+  </div>
+
+  <div class="tree-container" id="treeContainer">
+    <div class="loading" id="loadingState">
+      <div class="spinner"></div>
+      <p>Loading guideline tree...</p>
+    </div>
+  </div>
+
+  <div class="recommendation-box" id="recommendationBox" style="display: none;">
+    <h3>Current Recommendation</h3>
+    <p id="recommendationText"></p>
+  </div>
+
+  <div class="action-buttons">
+    <button class="btn btn-primary" id="applyBtn">Apply to Patient</button>
+    <button class="btn btn-secondary" id="viewEvidenceBtn">View Evidence</button>
+  </div>
+
+  <script>
+    // Guideline tree data structures
+    const guidelineData = {
+      nsclc: {
+        id: 'nsclc-root',
+        label: 'Non-Small Cell Lung Cancer',
+        type: 'decision',
+        evidence: 'Category 1',
+        expanded: true,
+        children: [
+          {
+            id: 'staging-eval',
+            label: 'Initial Staging Evaluation',
+            type: 'test',
+            meta: 'CT chest/abdomen, PET-CT, Brain MRI',
+            children: [
+              {
+                id: 'stage-1-2',
+                label: 'Stage I-II (Early Stage)',
+                type: 'condition',
+                meta: 'T1-2 N0-1 M0',
+                children: [
+                  { id: 'surgery', label: 'Surgical Resection', type: 'treatment', evidence: 'Category 1', meta: 'Lobectomy preferred' },
+                  { id: 'adjuvant', label: 'Adjuvant Therapy', type: 'decision', meta: 'Consider for Stage IB-II' }
+                ]
+              },
+              {
+                id: 'stage-3',
+                label: 'Stage III (Locally Advanced)',
+                type: 'condition',
+                meta: 'T3-4 or N2-3 M0',
+                children: [
+                  { id: 'concurrent-crt', label: 'Concurrent Chemoradiation', type: 'treatment', evidence: 'Category 1' },
+                  { id: 'durvalumab', label: 'Durvalumab Consolidation', type: 'treatment', evidence: 'Category 1', meta: 'If PD-L1 >= 1%' }
+                ]
+              },
+              {
+                id: 'stage-4',
+                label: 'Stage IV (Metastatic)',
+                type: 'condition',
+                meta: 'M1a-c',
+                expanded: true,
+                children: [
+                  {
+                    id: 'biomarker-testing',
+                    label: 'Molecular Testing',
+                    type: 'test',
+                    evidence: 'Category 1',
+                    meta: 'EGFR, ALK, ROS1, BRAF, KRAS, NTRK, MET, RET, HER2, PD-L1',
+                    children: [
+                      { id: 'egfr-mut', label: 'EGFR Mutation Positive', type: 'condition', children: [
+                        { id: 'osimertinib', label: 'Osimertinib', type: 'treatment', evidence: 'Category 1', meta: '1st line preferred' }
+                      ]},
+                      { id: 'alk-pos', label: 'ALK Rearrangement', type: 'condition', children: [
+                        { id: 'alectinib', label: 'Alectinib', type: 'treatment', evidence: 'Category 1', meta: '1st line preferred' }
+                      ]},
+                      { id: 'pdl1-high', label: 'PD-L1 >= 50%, No Driver', type: 'condition', children: [
+                        { id: 'pembro-mono', label: 'Pembrolizumab Monotherapy', type: 'treatment', evidence: 'Category 1' }
+                      ]},
+                      { id: 'no-driver', label: 'No Driver, PD-L1 < 50%', type: 'condition', children: [
+                        { id: 'chemo-io', label: 'Chemotherapy + Immunotherapy', type: 'treatment', evidence: 'Category 1', meta: 'Pemetrexed/Carbo/Pembro' }
+                      ]}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      sclc: {
+        id: 'sclc-root',
+        label: 'Small Cell Lung Cancer',
+        type: 'decision',
+        expanded: true,
+        children: [
+          { id: 'limited-sclc', label: 'Limited Stage', type: 'condition', meta: 'Confined to hemithorax', children: [
+            { id: 'crt-sclc', label: 'Concurrent Chemoradiation', type: 'treatment', evidence: 'Category 1' },
+            { id: 'pci', label: 'Prophylactic Cranial Irradiation', type: 'treatment', meta: 'If responding' }
+          ]},
+          { id: 'extensive-sclc', label: 'Extensive Stage', type: 'condition', meta: 'Beyond hemithorax', children: [
+            { id: 'chemo-io-sclc', label: 'Carboplatin/Etoposide + Atezolizumab', type: 'treatment', evidence: 'Category 1' }
+          ]}
+        ]
+      },
+      biomarker: {
+        id: 'biomarker-root',
+        label: 'Biomarker Testing Algorithm',
+        type: 'decision',
+        expanded: true,
+        children: [
+          { id: 'tissue-test', label: 'Tissue-Based NGS Panel', type: 'test', meta: 'Broad panel preferred', children: [
+            { id: 'sufficient', label: 'Sufficient Tissue', type: 'condition', children: [
+              { id: 'ngs-panel', label: 'Comprehensive NGS', type: 'test', meta: 'DNA + RNA fusion panel' }
+            ]},
+            { id: 'insufficient', label: 'Insufficient Tissue', type: 'condition', children: [
+              { id: 'liquid-biopsy', label: 'Liquid Biopsy (ctDNA)', type: 'test', meta: 'If tissue unavailable' }
+            ]}
+          ]},
+          { id: 'pdl1-test', label: 'PD-L1 IHC Testing', type: 'test', meta: '22C3 or SP263 assay' }
+        ]
+      },
+      staging: {
+        id: 'staging-root',
+        label: 'TNM Staging (8th Edition)',
+        type: 'decision',
+        expanded: true,
+        children: [
+          { id: 't-stage', label: 'T Stage (Tumor)', type: 'condition', children: [
+            { id: 't1', label: 'T1: <= 3cm', type: 'condition', meta: 'T1a<=1cm, T1b<=2cm, T1c<=3cm' },
+            { id: 't2', label: 'T2: >3-5cm or bronchus/visceral pleura', type: 'condition' },
+            { id: 't3', label: 'T3: >5-7cm or chest wall/pericardium', type: 'condition' },
+            { id: 't4', label: 'T4: >7cm or mediastinum/heart/great vessels', type: 'condition' }
+          ]},
+          { id: 'n-stage', label: 'N Stage (Nodes)', type: 'condition', children: [
+            { id: 'n0', label: 'N0: No regional nodes', type: 'condition' },
+            { id: 'n1', label: 'N1: Ipsilateral peribronchial/hilar', type: 'condition' },
+            { id: 'n2', label: 'N2: Ipsilateral mediastinal', type: 'condition' },
+            { id: 'n3', label: 'N3: Contralateral/supraclavicular', type: 'condition' }
+          ]},
+          { id: 'm-stage', label: 'M Stage (Metastasis)', type: 'condition', children: [
+            { id: 'm0', label: 'M0: No distant metastasis', type: 'condition' },
+            { id: 'm1a', label: 'M1a: Contralateral lung/pleural', type: 'condition' },
+            { id: 'm1b', label: 'M1b: Single extrathoracic met', type: 'condition' },
+            { id: 'm1c', label: 'M1c: Multiple extrathoracic mets', type: 'condition' }
+          ]}
+        ]
+      }
+    };
+
+    let currentGuideline = 'nsclc';
+    let selectedNode = null;
+
+    // AppBridge communication
+    function sendMessage(method, params = {}) {
+      window.parent.postMessage({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params
+      }, '*');
+    }
+
+    // Render tree recursively
+    function renderTree(node, isRoot = false) {
+      const hasChildren = node.children && node.children.length > 0;
+      const isExpanded = node.expanded || false;
+
+      let html = `<div class="tree-node" data-id="${node.id}">`;
+      html += `<div class="node-item" onclick="toggleNode('${node.id}')">`;
+
+      if (hasChildren) {
+        html += `<span class="node-toggle ${isExpanded ? 'expanded' : ''}">▶</span>`;
+      } else {
+        html += `<span class="node-toggle" style="visibility: hidden">▶</span>`;
+      }
+
+      html += `<div class="node-content">`;
+      html += `<div class="node-label">`;
+      html += `<span class="node-type ${node.type}">${node.type}</span>`;
+      html += node.label;
+      if (node.evidence) {
+        html += `<span class="evidence-badge">${node.evidence}</span>`;
+      }
+      html += `</div>`;
+      if (node.meta) {
+        html += `<div class="node-meta">${node.meta}</div>`;
+      }
+      html += `</div></div>`;
+
+      if (hasChildren) {
+        html += `<div class="node-children ${isExpanded ? 'expanded' : ''}" id="children-${node.id}">`;
+        node.children.forEach(child => {
+          html += renderTree(child);
+        });
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    function toggleNode(nodeId) {
+      const childrenEl = document.getElementById(`children-${nodeId}`);
+      const nodeEl = document.querySelector(`[data-id="${nodeId}"] > .node-item .node-toggle`);
+
+      if (childrenEl) {
+        childrenEl.classList.toggle('expanded');
+        nodeEl.classList.toggle('expanded');
+      }
+
+      // Find and select the node
+      const node = findNode(guidelineData[currentGuideline], nodeId);
+      if (node) {
+        selectNode(node);
+      }
+    }
+
+    function findNode(tree, nodeId) {
+      if (tree.id === nodeId) return tree;
+      if (tree.children) {
+        for (const child of tree.children) {
+          const found = findNode(child, nodeId);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    function selectNode(node) {
+      selectedNode = node;
+      const recBox = document.getElementById('recommendationBox');
+      const recText = document.getElementById('recommendationText');
+
+      if (node.type === 'treatment') {
+        recBox.style.display = 'block';
+        recText.textContent = `Recommended: ${node.label}. ${node.meta || ''} ${node.evidence ? `(Evidence: ${node.evidence})` : ''}`;
+      } else if (node.type === 'test') {
+        recBox.style.display = 'block';
+        recText.textContent = `Testing Required: ${node.label}. ${node.meta || ''}`;
+      } else {
+        recBox.style.display = 'none';
+      }
+
+      sendMessage('ui/message', {
+        type: 'nodeSelected',
+        node: { id: node.id, label: node.label, type: node.type }
+      });
+    }
+
+    function loadGuideline(guideline) {
+      currentGuideline = guideline;
+      const container = document.getElementById('treeContainer');
+      const data = guidelineData[guideline];
+
+      if (data) {
+        container.innerHTML = renderTree(data, true);
+        document.getElementById('recommendationBox').style.display = 'none';
+      }
+    }
+
+    // Tab click handlers
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        loadGuideline(tab.dataset.guideline);
+      });
+    });
+
+    // Action button handlers
+    document.getElementById('applyBtn').addEventListener('click', () => {
+      if (selectedNode) {
+        sendMessage('tools/call', {
+          name: 'apply_guideline_recommendation',
+          input: {
+            guideline: currentGuideline,
+            node_id: selectedNode.id,
+            recommendation: selectedNode.label,
+            type: selectedNode.type
+          }
+        });
+      }
+    });
+
+    document.getElementById('viewEvidenceBtn').addEventListener('click', () => {
+      if (selectedNode) {
+        sendMessage('tools/call', {
+          name: 'get_guideline_evidence',
+          input: {
+            guideline: currentGuideline,
+            node_id: selectedNode.id
+          }
+        });
+      }
+    });
+
+    // Listen for messages from host
+    window.addEventListener('message', (event) => {
+      const { method, params } = event.data || {};
+
+      if (method === 'ui/notifications/tool-input') {
+        // Handle incoming patient data
+        if (params?.patientData) {
+          // Could highlight relevant paths based on patient data
+          console.log('Patient data received:', params.patientData);
+        }
+      }
+
+      if (method === 'ui/notifications/tool-result') {
+        // Handle tool results
+        console.log('Tool result:', params);
+      }
+    });
+
+    // Initialize
+    sendMessage('ui/initialize', {
+      capabilities: ['guideline-navigation', 'recommendation-apply'],
+      title: 'Guideline Decision Tree'
+    });
+
+    // Initial load
+    setTimeout(() => loadGuideline('nsclc'), 500);
+  </script>
+</body>
+</html>

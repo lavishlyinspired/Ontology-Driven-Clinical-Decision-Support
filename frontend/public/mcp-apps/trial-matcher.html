@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinical Trial Matcher</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d0d12;
+      color: #e4e4e7;
+      padding: 16px;
+      min-height: 100vh;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #27272a;
+    }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fafafa;
+    }
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .match-count {
+      background: #14532d;
+      color: #4ade80;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-left: auto;
+    }
+    .filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .filter-chip {
+      background: #18181b;
+      border: 1px solid #27272a;
+      color: #a1a1aa;
+      padding: 6px 12px;
+      border-radius: 16px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .filter-chip:hover { border-color: #3f3f46; }
+    .filter-chip.active {
+      background: #14532d;
+      border-color: #166534;
+      color: #4ade80;
+    }
+    .trial-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 450px;
+      overflow-y: auto;
+    }
+    .trial-card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .trial-card:hover {
+      border-color: #3f3f46;
+      transform: translateY(-1px);
+    }
+    .trial-card.selected {
+      border-color: #10b981;
+      background: #052e16;
+    }
+    .trial-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .match-score {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .match-score.high { background: #14532d; color: #4ade80; }
+    .match-score.medium { background: #422006; color: #fbbf24; }
+    .match-score.low { background: #450a0a; color: #f87171; }
+    .match-score span { font-size: 18px; }
+    .match-score small { font-size: 9px; color: #71717a; }
+    .trial-info { flex: 1; }
+    .trial-id {
+      font-size: 11px;
+      color: #71717a;
+      margin-bottom: 4px;
+    }
+    .trial-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #fafafa;
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+    .trial-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .meta-tag {
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .meta-tag.phase { background: #1e3a5f; color: #60a5fa; }
+    .meta-tag.status { background: #14532d; color: #4ade80; }
+    .meta-tag.location { background: #27272a; color: #a1a1aa; }
+    .eligibility {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #27272a;
+    }
+    .eligibility-title {
+      font-size: 11px;
+      color: #71717a;
+      margin-bottom: 8px;
+    }
+    .criteria-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .criterion {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .criterion-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+    .criterion-icon.met { background: #14532d; color: #4ade80; }
+    .criterion-icon.unmet { background: #450a0a; color: #f87171; }
+    .criterion-icon.unknown { background: #27272a; color: #71717a; }
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .btn {
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      flex: 1;
+    }
+    .btn-primary {
+      background: #059669;
+      color: white;
+    }
+    .btn-primary:hover { background: #047857; }
+    .btn-secondary {
+      background: #27272a;
+      color: #e4e4e7;
+      border: 1px solid #3f3f46;
+    }
+    .btn-secondary:hover { background: #3f3f46; }
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #71717a;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+    }
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #27272a;
+      border-top-color: #10b981;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .patient-context {
+      background: #1e1b4b;
+      border: 1px solid #4c1d95;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    .patient-context h3 {
+      font-size: 12px;
+      color: #a78bfa;
+      margin-bottom: 8px;
+    }
+    .patient-attributes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .patient-attr {
+      background: #27272a;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #d4d4d8;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <path d="M9 12l2 2 4-4"/>
+        <path d="M12 3a9 9 0 1 0 9 9"/>
+        <path d="M21 3v6h-6"/>
+      </svg>
+    </div>
+    <h1>Clinical Trial Matcher</h1>
+    <span class="match-count" id="matchCount">Loading...</span>
+  </div>
+
+  <div class="patient-context" id="patientContext">
+    <h3>Patient Profile</h3>
+    <div class="patient-attributes" id="patientAttributes">
+      <span class="patient-attr">Stage IV NSCLC</span>
+      <span class="patient-attr">EGFR L858R</span>
+      <span class="patient-attr">PD-L1: 45%</span>
+      <span class="patient-attr">ECOG PS 1</span>
+      <span class="patient-attr">No brain mets</span>
+    </div>
+  </div>
+
+  <div class="filters">
+    <button class="filter-chip active" data-filter="all">All Trials</button>
+    <button class="filter-chip" data-filter="high-match">High Match (>80%)</button>
+    <button class="filter-chip" data-filter="phase3">Phase III</button>
+    <button class="filter-chip" data-filter="recruiting">Recruiting</button>
+    <button class="filter-chip" data-filter="targeted">Targeted Therapy</button>
+    <button class="filter-chip" data-filter="immunotherapy">Immunotherapy</button>
+  </div>
+
+  <div class="trial-list" id="trialList">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Finding matching trials...</p>
+    </div>
+  </div>
+
+  <div class="action-buttons">
+    <button class="btn btn-primary" id="referBtn">Refer to Selected Trial</button>
+    <button class="btn btn-secondary" id="compareBtn">Compare Selected</button>
+  </div>
+
+  <script>
+    // Mock clinical trials data
+    const clinicalTrials = [
+      {
+        id: 'NCT04487080',
+        title: 'Osimertinib Plus Savolitinib in EGFRm NSCLC With MET Amplification',
+        phase: 'Phase III',
+        status: 'Recruiting',
+        location: 'Multi-center',
+        matchScore: 92,
+        category: 'targeted',
+        criteria: [
+          { text: 'Stage IV NSCLC', met: true },
+          { text: 'EGFR mutation', met: true },
+          { text: 'Prior osimertinib', met: 'unknown' },
+          { text: 'MET amplification', met: 'unknown' },
+          { text: 'ECOG PS 0-1', met: true }
+        ]
+      },
+      {
+        id: 'NCT04538664',
+        title: 'Amivantamab + Lazertinib vs Osimertinib in EGFR-Mutated NSCLC',
+        phase: 'Phase III',
+        status: 'Recruiting',
+        location: 'International',
+        matchScore: 88,
+        category: 'targeted',
+        criteria: [
+          { text: 'Stage IV NSCLC', met: true },
+          { text: 'EGFR ex19del or L858R', met: true },
+          { text: 'No prior systemic therapy', met: true },
+          { text: 'ECOG PS 0-1', met: true },
+          { text: 'No CNS metastases', met: true }
+        ]
+      },
+      {
+        id: 'NCT04642469',
+        title: 'Pembrolizumab + Chemotherapy in EGFR-TKI Resistant NSCLC',
+        phase: 'Phase III',
+        status: 'Recruiting',
+        location: 'US, Europe',
+        matchScore: 75,
+        category: 'immunotherapy',
+        criteria: [
+          { text: 'Stage IV NSCLC', met: true },
+          { text: 'Prior EGFR TKI', met: 'unknown' },
+          { text: 'PD-L1 >= 1%', met: true },
+          { text: 'No autoimmune disease', met: 'unknown' },
+          { text: 'ECOG PS 0-1', met: true }
+        ]
+      },
+      {
+        id: 'NCT04820023',
+        title: 'Patritumab Deruxtecan in EGFR-Mutated NSCLC After Resistance',
+        phase: 'Phase II',
+        status: 'Recruiting',
+        location: 'US',
+        matchScore: 70,
+        category: 'targeted',
+        criteria: [
+          { text: 'EGFR mutation', met: true },
+          { text: 'Prior 3rd-gen TKI', met: 'unknown' },
+          { text: 'HER3 expression', met: 'unknown' },
+          { text: 'ECOG PS 0-1', met: true },
+          { text: 'Adequate organ function', met: 'unknown' }
+        ]
+      },
+      {
+        id: 'NCT05061550',
+        title: 'Datopotamab Deruxtecan + Durvalumab in Advanced NSCLC',
+        phase: 'Phase III',
+        status: 'Recruiting',
+        location: 'Global',
+        matchScore: 65,
+        category: 'immunotherapy',
+        criteria: [
+          { text: 'Stage IV NSCLC', met: true },
+          { text: 'No driver mutations', met: false },
+          { text: 'PD-L1 >= 50%', met: false },
+          { text: 'No prior immunotherapy', met: 'unknown' },
+          { text: 'ECOG PS 0-1', met: true }
+        ]
+      },
+      {
+        id: 'NCT05132075',
+        title: 'Trastuzumab Deruxtecan in HER2-Mutant NSCLC',
+        phase: 'Phase II',
+        status: 'Active',
+        location: 'US, Japan',
+        matchScore: 45,
+        category: 'targeted',
+        criteria: [
+          { text: 'Stage IV NSCLC', met: true },
+          { text: 'HER2 mutation', met: false },
+          { text: 'Prior chemotherapy', met: 'unknown' },
+          { text: 'ECOG PS 0-1', met: true },
+          { text: 'No ILD history', met: 'unknown' }
+        ]
+      }
+    ];
+
+    let selectedTrials = new Set();
+    let currentFilter = 'all';
+
+    // AppBridge communication
+    function sendMessage(method, params = {}) {
+      window.parent.postMessage({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params
+      }, '*');
+    }
+
+    function getMatchScoreClass(score) {
+      if (score >= 80) return 'high';
+      if (score >= 60) return 'medium';
+      return 'low';
+    }
+
+    function getCriterionIcon(met) {
+      if (met === true) return { class: 'met', icon: '✓' };
+      if (met === false) return { class: 'unmet', icon: '✗' };
+      return { class: 'unknown', icon: '?' };
+    }
+
+    function renderTrial(trial) {
+      const scoreClass = getMatchScoreClass(trial.matchScore);
+      const isSelected = selectedTrials.has(trial.id);
+
+      let criteriaHtml = trial.criteria.map(c => {
+        const icon = getCriterionIcon(c.met);
+        return `
+          <div class="criterion">
+            <span class="criterion-icon ${icon.class}">${icon.icon}</span>
+            <span>${c.text}</span>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="trial-card ${isSelected ? 'selected' : ''}" data-id="${trial.id}">
+          <div class="trial-header">
+            <div class="match-score ${scoreClass}">
+              <span>${trial.matchScore}%</span>
+              <small>match</small>
+            </div>
+            <div class="trial-info">
+              <div class="trial-id">${trial.id}</div>
+              <div class="trial-title">${trial.title}</div>
+              <div class="trial-meta">
+                <span class="meta-tag phase">${trial.phase}</span>
+                <span class="meta-tag status">${trial.status}</span>
+                <span class="meta-tag location">${trial.location}</span>
+              </div>
+            </div>
+          </div>
+          <div class="eligibility">
+            <div class="eligibility-title">Eligibility Criteria Match</div>
+            <div class="criteria-list">${criteriaHtml}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function filterTrials(filter) {
+      currentFilter = filter;
+      let filtered = clinicalTrials;
+
+      switch (filter) {
+        case 'high-match':
+          filtered = clinicalTrials.filter(t => t.matchScore >= 80);
+          break;
+        case 'phase3':
+          filtered = clinicalTrials.filter(t => t.phase.includes('III'));
+          break;
+        case 'recruiting':
+          filtered = clinicalTrials.filter(t => t.status === 'Recruiting');
+          break;
+        case 'targeted':
+          filtered = clinicalTrials.filter(t => t.category === 'targeted');
+          break;
+        case 'immunotherapy':
+          filtered = clinicalTrials.filter(t => t.category === 'immunotherapy');
+          break;
+      }
+
+      renderTrialList(filtered);
+    }
+
+    function renderTrialList(trials) {
+      const container = document.getElementById('trialList');
+      document.getElementById('matchCount').textContent = `${trials.length} trials found`;
+
+      if (trials.length === 0) {
+        container.innerHTML = '<div class="empty-state">No matching trials found</div>';
+        return;
+      }
+
+      container.innerHTML = trials.map(renderTrial).join('');
+
+      // Add click handlers
+      container.querySelectorAll('.trial-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const trialId = card.dataset.id;
+          if (selectedTrials.has(trialId)) {
+            selectedTrials.delete(trialId);
+            card.classList.remove('selected');
+          } else {
+            selectedTrials.add(trialId);
+            card.classList.add('selected');
+          }
+        });
+      });
+    }
+
+    // Filter chip handlers
+    document.querySelectorAll('.filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        filterTrials(chip.dataset.filter);
+      });
+    });
+
+    // Action button handlers
+    document.getElementById('referBtn').addEventListener('click', () => {
+      if (selectedTrials.size === 0) {
+        alert('Please select at least one trial');
+        return;
+      }
+
+      const selected = Array.from(selectedTrials);
+      const trials = clinicalTrials.filter(t => selected.includes(t.id));
+
+      sendMessage('tools/call', {
+        name: 'refer_to_trial',
+        input: {
+          trial_ids: selected,
+          trials: trials.map(t => ({
+            id: t.id,
+            title: t.title,
+            matchScore: t.matchScore
+          }))
+        }
+      });
+    });
+
+    document.getElementById('compareBtn').addEventListener('click', () => {
+      if (selectedTrials.size < 2) {
+        alert('Please select at least two trials to compare');
+        return;
+      }
+
+      const selected = Array.from(selectedTrials);
+      const trials = clinicalTrials.filter(t => selected.includes(t.id));
+
+      sendMessage('tools/call', {
+        name: 'compare_trials',
+        input: {
+          trials: trials.map(t => ({
+            id: t.id,
+            title: t.title,
+            phase: t.phase,
+            matchScore: t.matchScore,
+            criteria: t.criteria
+          }))
+        }
+      });
+    });
+
+    // Listen for messages from host
+    window.addEventListener('message', (event) => {
+      const { method, params } = event.data || {};
+
+      if (method === 'ui/notifications/tool-input') {
+        // Update patient context if provided
+        if (params?.patientData) {
+          const attrs = document.getElementById('patientAttributes');
+          attrs.innerHTML = Object.entries(params.patientData)
+            .map(([k, v]) => `<span class="patient-attr">${k}: ${v}</span>`)
+            .join('');
+        }
+      }
+
+      if (method === 'ui/notifications/tool-result') {
+        console.log('Tool result:', params);
+      }
+    });
+
+    // Initialize
+    sendMessage('ui/initialize', {
+      capabilities: ['trial-matching', 'trial-referral', 'trial-comparison'],
+      title: 'Clinical Trial Matcher'
+    });
+
+    // Initial load
+    setTimeout(() => {
+      filterTrials('all');
+    }, 500);
+  </script>
+</body>
+</html>

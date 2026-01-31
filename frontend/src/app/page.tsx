@@ -54,24 +54,24 @@ const actions = [
 
 export default function HomePage() {
   return (
-    <main className="max-w-7xl mx-auto">
+    <main className="max-w-7xl mx-auto p-8">
       {/* Hero Section */}
       <section className="mb-12">
         <div className="mb-8">
-          <p className="text-blue-600 font-medium mb-2">Lung Cancer Assistant</p>
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+          <p className="text-violet-400 font-bold mb-2">Lung Cancer Assistant</p>
+          <h1 className="text-4xl md:text-5xl font-bold text-zinc-100 mb-4">
             Guideline-driven decision support that feels intentional and modern.
           </h1>
-          <p className="text-lg text-gray-600 mb-8">
+          <p className="text-lg text-zinc-400 mb-8">
             Unified dashboard for oncology teams bridging ontology, vector search, and LangGraph coordination.
           </p>
           
           {/* Highlights Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             {highlights.map((item) => (
-              <div key={item.label} className="card bg-gray-50">
-                <p className="text-sm text-gray-500 mb-1">{item.label}</p>
-                <h3 className="text-xl font-semibold text-gray-900">{item.value}</h3>
+              <div key={item.label} className="card bg-zinc-800 border-zinc-700">
+                <p className="text-sm text-zinc-500 mb-1">{item.label}</p>
+                <h3 className="text-xl font-semibold text-zinc-100">{item.value}</h3>
               </div>
             ))}
           </div>
@@ -81,7 +81,7 @@ export default function HomePage() {
             {["MDT orchestration", "SNOMED mapping", "Neo4j persistence", "LLM-explanation"].map((text) => (
               <span
                 key={text}
-                className="px-4 py-2 bg-blue-50 text-blue-700 text-sm font-medium rounded-full border border-blue-200"
+                className="px-4 py-2 bg-violet-600/20 text-violet-400 text-sm font-medium rounded-full border border-violet-600/30"
               >
                 {text}
               </span>
@@ -91,10 +91,10 @@ export default function HomePage() {
           {/* Action Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {actions.map((action) => (
-              <Link key={action.href} href={action.href} className="card hover:border-blue-300 hover:shadow-lg transition-all">
+              <Link key={action.href} href={action.href} className="card hover:border-violet-500 hover:shadow-lg hover:shadow-violet-500/20 transition-all bg-gradient-to-br from-zinc-800 to-zinc-900">
                 <div className="text-center">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">{action.title}</h3>
-                  <p className="text-sm text-gray-600">{action.description}</p>
+                  <h3 className="text-lg font-semibold text-zinc-100 mb-2">{action.title}</h3>
+                  <p className="text-sm text-zinc-400">{action.description}</p>
                 </div>
               </Link>
             ))}
@@ -104,17 +104,17 @@ export default function HomePage() {
 
       {/* Features Section */}
       <section className="section">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">Experience the Narrative</h2>
+        <h2 className="text-3xl font-bold text-zinc-100 mb-6">Experience the Narrative</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {features.map((feature) => {
             const Icon = feature.icon;
             return (
-              <article key={feature.title} className="card">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                  <Icon className="w-6 h-6 text-blue-600" />
+              <article key={feature.title} className="card bg-zinc-800 border-zinc-700">
+                <div className="w-12 h-12 bg-violet-600/20 rounded-lg flex items-center justify-center mb-4">
+                  <Icon className="w-6 h-6 text-violet-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600">{feature.body}</p>
+                <h3 className="text-lg font-semibold text-zinc-100 mb-2">{feature.title}</h3>
+                <p className="text-zinc-400">{feature.body}</p>
               </article>
             );
           })}
@@ -122,19 +122,19 @@ export default function HomePage() {
       </section>
 
       <section className="section">
-        <h2>Design Direction</h2>
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
-          <article className="card">
-            <h3>Expressive Typography</h3>
-            <p>Space Grotesk headline energy and purposeful spacing to signal tension-free expertise.</p>
+        <h2 className="text-3xl font-bold text-zinc-100 mb-6">Design Direction</h2>
+        <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+          <article className="card bg-zinc-800 border-zinc-700">
+            <h3 className="text-lg font-semibold text-zinc-100 mb-2">Expressive Typography</h3>
+            <p className="text-zinc-400">Space Grotesk headline energy and purposeful spacing to signal tension-free expertise.</p>
           </article>
-          <article className="card">
-            <h3>Color & Light</h3>
-            <p>Gradient surfaces, warm accent amber, and emerald glows keep focus on critical insights.</p>
+          <article className="card bg-zinc-800 border-zinc-700">
+            <h3 className="text-lg font-semibold text-zinc-100 mb-2">Color & Light</h3>
+            <p className="text-zinc-400">Gradient surfaces, warm accent amber, and emerald glows keep focus on critical insights.</p>
           </article>
-          <article className="card">
-            <h3>Motion</h3>
-            <p>Buttons and cards animate subtle hover glimmers for feel of a living clinical dashboard.</p>
+          <article className="card bg-zinc-800 border-zinc-700">
+            <h3 className="text-lg font-semibold text-zinc-100 mb-2">Motion</h3>
+            <p className="text-zinc-400">Buttons and cards animate subtle hover glimmers for feel of a living clinical dashboard.</p>
           </article>
         </div>
       </section>

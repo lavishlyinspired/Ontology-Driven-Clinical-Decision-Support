@@ -79,7 +79,9 @@ from src.api.routes import (
     system_router,
     chat_router,
     graph_router,
-    chat_graph_router
+    chat_graph_router,
+    ontology_router,
+    graph_algorithms_router
 )
 
 # Initialize FastAPI
@@ -230,6 +232,8 @@ app.include_router(system_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")  # Chat streaming endpoint
 app.include_router(graph_router, prefix="/api")  # Graph visualization endpoints
 app.include_router(chat_graph_router, prefix="/api")  # Enhanced chat with graph integration
+app.include_router(ontology_router, prefix="/api/v1")  # Ontology lookup and validation
+app.include_router(graph_algorithms_router, prefix="/api/v1")  # Neo4j graph algorithms
 
 # Global service instance
 lca_service: Optional[LungCancerAssistantService] = None

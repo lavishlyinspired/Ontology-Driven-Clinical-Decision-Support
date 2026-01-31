@@ -24,16 +24,20 @@ interface NvlRelationship {
   selected?: boolean
 }
 
-// Node color mapping by label - Clinical entities
+// Node color mapping by label - GitNexus-inspired vibrant clinical palette
 const NODE_COLORS: Record<string, string> = {
-  Patient: '#4299E1',           // Blue
-  TreatmentDecision: '#9F7AEA', // Purple
-  Biomarker: '#48BB78',         // Green
-  Guideline: '#38B2AC',         // Teal
-  Comorbidity: '#ED8936',       // Orange
-  ClinicalTrial: '#F56565',     // Red
-  SNOMED: '#63B3ED',            // Light blue
-  Inference: '#B794F4',         // Light purple
+  Patient: '#3b82f6',           // Blue (vibrant) - central entity
+  TreatmentDecision: '#a855f7', // Purple (prominent) - key decisions
+  Biomarker: '#10b981',         // Emerald (vivid) - biological markers
+  Guideline: '#f59e0b',         // Amber (stands out) - clinical guidelines
+  Comorbidity: '#f97316',       // Orange (bright) - conditions
+  ClinicalTrial: '#f43f5e',     // Rose (execution indicator) - trials
+  SNOMED: '#06b6d4',            // Cyan (distinct) - ontology codes
+  Inference: '#8b5cf6',         // Violet (analytic) - derived knowledge
+  Treatment: '#14b8a6',         // Teal - therapies
+  Diagnosis: '#eab308',         // Yellow - diagnoses
+  Procedure: '#ec4899',         // Pink - medical procedures
+  Medication: '#22c55e',        // Green - drugs/medications
 }
 
 // Node size by label

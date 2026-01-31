@@ -40,7 +40,7 @@ export default function WebSocketUpdates() {
     // Connect to WebSocket
     const wsUrl =
       process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/api/v1/ws/connect";
-    const ws = new WebSocket(`${wsUrl}?user_id=${user.id}`);
+    const ws = new WebSocket(`${wsUrl}?user_id=${user.user_id}`);
 
     ws.onopen = () => {
       console.log("WebSocket connected");

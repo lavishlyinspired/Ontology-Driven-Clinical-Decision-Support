@@ -683,7 +683,114 @@ class IntegratedLCAWorkflow:
                     return result
                 return None
             registry["CounterfactualEngine"] = counterfactual_wrapper
-        
+
+        # Add Graph Algorithms if available (Neo4j GDS)
+        if self.graph_algorithms and self.graph_algorithms.is_available:
+            async def graph_similarity_wrapper(data):
+                patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                if isinstance(patient_with_codes, dict):
+                    p_id = patient_with_codes.get("patient_id", patient_data.get("patient_id", "unknown"))
+                else:
+                    p_id = getattr(patient_with_codes, "patient_id", "unknown")
+                try:
+                    similar = self.graph_algorithms.find_similar_patients_graph_based(p_id, k=5)
+                    logger.info(f"[GraphAlgorithms] Found {len(similar)} similar patients via graph-based similarity")
+                    return {"similar_patients": similar, "algorithm": "node_similarity"}
+                except Exception as e:
+                    logger.warning(f"[GraphAlgorithms] Graph similarity failed: {e}")
+                    return None
+            registry["GraphSimilarityAgent"] = graph_similarity_wrapper
+
+            async def community_detection_wrapper(data):
+                try:
+                    communities = self.graph_algorithms.detect_treatment_communities(resolution=1.0)
+                    logger.info(f"[GraphAlgorithms] Detected {len(communities) if communities else 0} treatment communities")
+                    return {"communities": communities, "algorithm": "louvain"}
+                except Exception as e:
+                    logger.warning(f"[GraphAlgorithms] Community detection failed: {e}")
+                    return None
+            registry["CommunityDetectionAgent"] = community_detection_wrapper
+
+            async def treatment_pathfinding_wrapper(data):
+                patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                if isinstance(patient_with_codes, dict):
+                    p_id = patient_with_codes.get("patient_id", patient_data.get("patient_id", "unknown"))
+                else:
+                    p_id = getattr(patient_with_codes, "patient_id", "unknown")
+                try:
+                    paths = self.graph_algorithms.find_optimal_treatment_paths(p_id, target_outcome="complete_response", max_depth=5)
+                    logger.info(f"[GraphAlgorithms] Found {len(paths) if paths else 0} optimal treatment paths")
+                    return {"treatment_paths": paths, "algorithm": "shortest_path"}
+                except Exception as e:
+                    logger.warning(f"[GraphAlgorithms] Treatment pathfinding failed: {e}")
+                    return None
+            registry["TreatmentPathfindingAgent"] = treatment_pathfinding_wrapper
+
+            async def influential_treatments_wrapper(data):
+                try:
+                    treatments = self.graph_algorithms.find_influential_treatments(top_n=10)
+                    logger.info(f"[GraphAlgorithms] Found {len(treatments) if treatments else 0} influential treatments")
+                    return {"influential_treatments": treatments, "algorithm": "degree_centrality"}
+                except Exception as e:
+                    logger.warning(f"[GraphAlgorithms] Influential treatments analysis failed: {e}")
+                    return None
+            registry["InfluentialTreatmentsAgent"] = influential_treatments_wrapper
+
+        # Add Neosemantics Tools if available (n10s)
+        if self.neosemantics_tools:
+            async def ontology_validation_wrapper(data):
+                patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                if isinstance(patient_with_codes, dict):
+                    patient_dict = patient_with_codes
+                else:
+                    patient_dict = {
+                        "patient_id": getattr(patient_with_codes, "patient_id", "unknown"),
+                        "histology_type": getattr(patient_with_codes, "histology_type", ""),
+                        "tnm_stage": getattr(patient_with_codes, "tnm_stage", ""),
+                        "performance_status": getattr(patient_with_codes, "performance_status", 1),
+                        "snomed_codes": getattr(patient_with_codes, "snomed_codes", {})
+                    }
+                try:
+                    validation = self.neosemantics_tools.validate_patient_against_ontology(patient_dict)
+                    logger.info(f"[Neosemantics] Ontology validation: valid={validation.get('is_valid', False)}")
+                    return validation
+                except Exception as e:
+                    logger.warning(f"[Neosemantics] Ontology validation failed: {e}")
+                    return None
+            registry["OntologyValidationAgent"] = ontology_validation_wrapper
+
+            async def snomed_mapping_wrapper(data):
+                patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                if isinstance(patient_with_codes, dict):
+                    histology = patient_with_codes.get("histology_type", "")
+                else:
+                    histology = getattr(patient_with_codes, "histology_type", "")
+                try:
+                    snomed_mapping = self.neosemantics_tools.map_to_snomed(histology)
+                    logger.info(f"[Neosemantics] SNOMED mapping for '{histology}': {snomed_mapping}")
+                    return snomed_mapping
+                except Exception as e:
+                    logger.warning(f"[Neosemantics] SNOMED mapping failed: {e}")
+                    return None
+            registry["SnomedMappingAgent"] = snomed_mapping_wrapper
+
+        # Add Temporal Analyzer if available
+        if self.temporal_analyzer:
+            async def temporal_analysis_wrapper(data):
+                patient_with_codes = data.get("SemanticMappingAgent_output", data)
+                if isinstance(patient_with_codes, dict):
+                    p_id = patient_with_codes.get("patient_id", patient_data.get("patient_id", "unknown"))
+                else:
+                    p_id = getattr(patient_with_codes, "patient_id", "unknown")
+                try:
+                    temporal_result = self.temporal_analyzer.analyze_patient_timeline(p_id)
+                    logger.info(f"[TemporalAnalyzer] Analyzed temporal patterns for patient {p_id}")
+                    return temporal_result
+                except Exception as e:
+                    logger.warning(f"[TemporalAnalyzer] Temporal analysis failed: {e}")
+                    return None
+            registry["TemporalAnalyzer"] = temporal_analysis_wrapper
+
         logger.info(f"[Registry] Final registry has {len(registry)} agents: {sorted(registry.keys())}")
         return registry
     

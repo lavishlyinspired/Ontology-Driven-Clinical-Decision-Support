@@ -1,13 +1,25 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, CheckCircle, XCircle, AlertCircle, Bot, User, Activity, Zap, ChevronDown, ChevronUp } from 'lucide-react'
+import { Send, Loader2, CheckCircle, XCircle, AlertCircle, Bot, User, Activity, Zap, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { GraphData, GraphNode } from '@/lib/api'
+import { McpAppHost } from './McpAppHost'
+import { GroundedCitations } from './GroundedCitations'
 
 interface ChatInterfaceProps {
   onGraphDataChange?: (data: GraphData) => void
   onDecisionNodesChange?: (decisions: GraphNode[]) => void
+}
+
+interface McpAppData {
+  resourceUri: string
+  input: Record<string, unknown>
+  result?: {
+    content?: Array<{ type: string; text: string }>
+    structuredContent?: Record<string, unknown>
+  }
+  title?: string
 }
 
 interface Message {
@@ -19,6 +31,7 @@ interface Message {
   complexity?: any
   graphData?: any
   toolCalls?: ToolCall[]
+  mcpApp?: McpAppData  // NEW: MCP App attachment
   metadata?: {
     complexity?: string
     workflow?: string
@@ -315,14 +328,17 @@ Try describing a patient to get started!`,
 
     try {
       // Stream response via SSE from backend
-      const response = await fetch('http://localhost:8000/api/v1/chat/stream', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/chat-graph/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           message: messageText,
-          session_id: sessionId
+          session_id: sessionId,
+          include_graph: true,
+          auto_expand_entities: true
         })
       })
 
@@ -597,34 +613,9 @@ Try describing a patient to get started!`,
   }
 
   return (
-    <div className="flex flex-col h-screen max-w-6xl mx-auto bg-white shadow-2xl">
-      {/* Header */}
-      <div className="border-b bg-gradient-to-r from-blue-500 via-blue-600 to-blue-500 text-white p-5 shadow-md">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-              <Bot className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold m-0">
-                LCA Assistant
-              </h1>
-              <p className="text-sm text-blue-100 m-0">
-                Ontology-driven clinical decision support for lung cancer
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={clearChat}
-            className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-lg text-sm font-medium transition-all hover:scale-105 active:scale-95"
-          >
-            Clear Chat
-          </button>
-        </div>
-      </div>
-
+    <div className="flex flex-col h-full w-full bg-zinc-900">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-gradient-to-b from-gray-50 to-white">
+      <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-gradient-to-b from-zinc-800 to-zinc-900">
         {messages.map((msg, index) => (
           <div
             key={msg.id}
@@ -632,7 +623,7 @@ Try describing a patient to get started!`,
             style={{ animationDelay: `${index * 50}ms` }}
           >
             {msg.role === 'assistant' && (
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm ring-2 ring-blue-100">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm ring-2 ring-violet-900/50">
                 <Bot className="w-5 h-5 text-white" />
               </div>
             )}
@@ -674,15 +665,29 @@ Try describing a patient to get started!`,
               <div
                 className={`rounded-2xl p-5 transition-all ${
                   msg.role === 'user'
-                    ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md'
-                    : 'bg-white border border-gray-200 text-gray-800 shadow-sm hover:shadow-md'
+                    ? 'bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-md'
+                    : 'bg-zinc-800 border border-zinc-700 text-zinc-100 shadow-sm hover:shadow-md'
                 }`}
               >
                 <div className={`prose prose-sm max-w-none ${
                   msg.role === 'user' ? 'prose-invert' : 'prose-blue'
                 }`}>
                   {msg.content ? (
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    msg.role === 'assistant' && msg.content.includes('[[') ? (
+                      <GroundedCitations
+                        text={msg.content}
+                        showTooltips={true}
+                        renderAs="inline"
+                        onCitationClick={(citation) => {
+                          console.log('Citation clicked:', citation)
+                          if (citation.url) {
+                            window.open(citation.url, '_blank', 'noopener,noreferrer')
+                          }
+                        }}
+                      />
+                    ) : (
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    )
                   ) : (
                     <div className="flex items-center gap-2 text-gray-400">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -690,6 +695,39 @@ Try describing a patient to get started!`,
                     </div>
                   )}
                 </div>
+
+                {/* MCP App Inline Rendering */}
+                {msg.mcpApp && (
+                  <div className="mt-4">
+                    <McpAppHost
+                      resourceUri={msg.mcpApp.resourceUri}
+                      toolInput={msg.mcpApp.input}
+                      toolResult={msg.mcpApp.result}
+                      title={msg.mcpApp.title || 'Interactive App'}
+                      height="350px"
+                      onToolCall={async (name, args) => {
+                        // Forward tool calls to backend
+                        try {
+                          const response = await fetch('/api/v1/ontology/arguments', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(args)
+                          })
+                          return await response.json()
+                        } catch (error) {
+                          console.error('MCP tool call failed:', error)
+                          return { error: 'Tool call failed' }
+                        }
+                      }}
+                      onMessage={(text) => {
+                        // Add message to input and send
+                        setInput(text)
+                        // Optionally auto-send
+                      }}
+                    />
+                  </div>
+                )}
+
                 <div className={`text-xs mt-3 flex items-center gap-1 ${
                   msg.role === 'user' ? 'text-blue-100' : 'text-gray-400'
                 }`}>
@@ -721,8 +759,8 @@ Try describing a patient to get started!`,
         {/* Suggestions */}
         {suggestions.length > 0 && !isStreaming && (
           <div className="flex justify-start animate-fadeIn">
-            <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-300 rounded-2xl p-5 max-w-[80%] shadow-sm">
-              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <div className="bg-gradient-to-br from-zinc-800 to-zinc-800/80 border border-zinc-700 rounded-2xl p-5 max-w-[80%] shadow-sm">
+              <p className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
                 <span className="text-lg">💡</span>
                 <span>Suggested follow-ups:</span>
               </p>
@@ -731,7 +769,7 @@ Try describing a patient to get started!`,
                   <button
                     key={idx}
                     onClick={() => handleSuggestionClick(sug)}
-                    className="block w-full text-left px-4 py-3 text-sm bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                    className="block w-full text-left px-4 py-3 text-sm bg-zinc-900 hover:bg-violet-900/30 text-zinc-200 border border-zinc-700 hover:border-violet-500 rounded-xl transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
                   >
                     {sug}
                   </button>
@@ -745,8 +783,8 @@ Try describing a patient to get started!`,
       </div>
 
       {/* Input */}
-      <div className="border-t bg-white p-4 shadow-sm">
-        <div className="flex gap-3">
+      <div className="border-t border-zinc-700 bg-zinc-800 p-4 shadow-sm">
+        <div className="flex gap-2">
           <input
             ref={inputRef}
             type="text"
@@ -754,13 +792,21 @@ Try describing a patient to get started!`,
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
             placeholder="Describe a patient or ask a question..."
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all hover:border-gray-400 text-base"
+            className="flex-1 px-4 py-3 border border-zinc-600 bg-zinc-900 text-zinc-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all hover:border-zinc-500 text-base placeholder-zinc-500"
             disabled={isStreaming}
           />
           <button
+            onClick={clearChat}
+            disabled={messages.length <= 1}
+            className="px-3 py-3 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95"
+            title="Clear chat"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+          <button
             onClick={() => sendMessage()}
             disabled={isStreaming || !input.trim()}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95 font-medium"
+            className="px-6 py-3 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95 font-medium"
           >
             {isStreaming ? (
               <>
@@ -775,8 +821,8 @@ Try describing a patient to get started!`,
             )}
           </button>
         </div>
-        <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
-          <span className="text-blue-600 font-medium">💡 Example:</span>
+        <p className="text-xs text-zinc-400 mt-3 flex items-center gap-1">
+          <span className="text-violet-400 font-medium">💡 Example:</span>
           <span>"68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PS 1"</span>
         </p>
       </div>

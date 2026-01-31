@@ -21,6 +21,8 @@ from .digital_twin_api import router as digital_twin_router
 from .chat import router as chat_router
 from .graph import router as graph_router
 from .chat_graph import router as chat_graph_router
+from .ontology import router as ontology_router
+from .graph_algorithms import router as graph_algorithms_router
 
 __all__ = [
     "patients_router",
@@ -40,6 +42,8 @@ __all__ = [
     "digital_twin_router",
     "chat_router",
     "graph_router",
-    "chat_graph_router"
+    "chat_graph_router",
+    "ontology_router",
+    "graph_algorithms_router"
 ]
 

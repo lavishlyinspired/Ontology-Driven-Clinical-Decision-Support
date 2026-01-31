@@ -1,6 +1,8 @@
 import "./globals.css";
 import { Space_Grotesk } from "next/font/google";
-import Sidebar from "@/components/Sidebar";
+import { AppProvider } from "@/contexts/AppContext";
+import Header from "@/components/Header";
+import { FloatingChatButton } from "@/components/FloatingChatButton";
 
 const space = Space_Grotesk({ subsets: ["latin"], variable: "--font-space" });
 
@@ -13,17 +15,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={space.variable}>
       <body className="antialiased">
-        <div className="app-container">
-          {/* Sidebar Navigation */}
-          <Sidebar />
-
-          {/* Main Content */}
-          <div className="main-content">
-            <div className="gradient-panel">
-              <main>{children}</main>
+        <AppProvider>
+          <div className="app-layout">
+            <Header />
+            <div className="app-content">
+              {children}
             </div>
+            <FloatingChatButton />
           </div>
-        </div>
+        </AppProvider>
       </body>
     </html>
   );

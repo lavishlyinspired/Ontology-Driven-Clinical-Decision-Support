@@ -24,6 +24,59 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /* Clinical Node Colors (GitNexus-inspired) */
+    --color-node-patient: #4299E1;
+    --color-node-treatment: #9F7AEA;
+    --color-node-biomarker: #48BB78;
+    --color-node-guideline: #38B2AC;
+    --color-node-comorbidity: #ED8936;
+    --color-node-trial: #F56565;
+    --color-node-inference: #B794F4;
+
+    /* MCP App Colors */
+    --color-accent: #7c3aed;
+    --color-accent-dim: #6d28d9;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-error: #ef4444;
+
+    /* Border */
+    --color-border-subtle: #e5e7eb;
+  }
+
+  /* Dark Theme Variables */
+  .dark, [data-theme="dark"] {
+    --background: 222 47% 6%;
+    --foreground: 0 0% 98%;
+    --card: 222 47% 8%;
+    --card-foreground: 0 0% 98%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 263 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 47% 14%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 222 47% 14%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 263 70% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 222 47% 18%;
+    --input: 222 47% 18%;
+    --ring: 263 70% 50%;
+
+    /* Dark Theme Surface Colors (GitNexus-style) */
+    --color-void: #06060a;
+    --color-deep: #0a0a10;
+    --color-surface: #12121a;
+    --color-elevated: #1a1a24;
+    --color-hover: #242430;
+    --color-text-primary: #f4f4f5;
+    --color-text-secondary: #a1a1aa;
+    --color-text-muted: #71717a;
+    --color-border-subtle: #27272a;
   }
 }
 
@@ -31,108 +84,347 @@
   * {
     @apply border-border;
   }
-  
+
   body {
-    @apply bg-white text-gray-900;
+    @apply bg-zinc-950 text-zinc-100;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     line-height: 1.6;
+    overflow: hidden;
   }
 }
 
-/* Layout */
-.app-container {
-  @apply flex min-h-screen bg-white;
+/* ==========================================
+   App Layout System
+   ========================================== */
+
+.app-layout {
+  @apply flex flex-col min-h-screen bg-zinc-950;
 }
 
-/* Sidebar Navigation */
-.sidebar {
-  @apply w-64 bg-white border-r border-gray-200 flex flex-col fixed h-screen top-0 left-0 z-40 transition-all duration-300;
+.app-content {
+  @apply flex-1 overflow-auto;
 }
 
-.sidebar-collapsed {
-  @apply w-20;
+/* ==========================================
+   GitNexus-Style Layout System
+   ========================================== */
+
+.gitnexus-layout {
+  @apply flex flex-col h-screen w-screen overflow-hidden bg-zinc-950;
+  /* Override when using gitnexus layout - hide the parent header */
+  margin-top: -56px;
+  height: calc(100vh);
 }
 
-.sidebar-toggle-btn {
-  @apply absolute top-4 -right-3 bg-white border border-gray-200 rounded-full w-6 h-6 flex items-center justify-center text-gray-600 hover:bg-gray-50 hover:text-gray-900 shadow-sm z-50 transition-all;
+.gitnexus-layout .top-nav {
+  /* This is the gitnexus's own header, show it */
+  @apply flex;
 }
 
-.sidebar-overlay {
-  @apply fixed inset-0 bg-black bg-opacity-50 z-30;
+/* Top Navigation Bar */
+.top-nav {
+  @apply flex items-center justify-between h-14 px-4 bg-gradient-to-r from-violet-600 via-purple-600 to-violet-600 border-b border-violet-700 flex-shrink-0 z-50;
 }
 
-.sidebar-header {
-  @apply px-6 py-5 border-b border-gray-200 transition-all;
+.nav-brand {
+  @apply flex items-center gap-3;
 }
 
-.sidebar-collapsed .sidebar-header {
-  @apply px-2;
+.brand-text {
+  @apply flex flex-col;
 }
 
-.sidebar-title {
-  @apply text-xl font-bold text-blue-600 m-0 flex items-center gap-2;
+.brand-title {
+  @apply text-lg font-bold text-white leading-tight;
 }
 
-.sidebar-subtitle {
-  @apply text-xs text-gray-500 mt-1 m-0;
+.brand-version {
+  @apply text-[10px] text-violet-200 leading-tight;
 }
 
-.nav-list {
-  @apply flex-1 py-4 m-0 list-none overflow-y-auto;
+.nav-links {
+  @apply flex items-center gap-1;
 }
 
-.nav-link {
-  @apply flex items-center px-6 py-3 text-gray-600 no-underline transition-all gap-3 hover:bg-gray-50 hover:text-gray-900;
+.nav-item {
+  @apply flex items-center gap-2 px-3 py-2 text-sm text-white font-bold rounded-lg transition-all no-underline;
+  @apply hover:bg-white/30 hover:text-white;
 }
 
-.sidebar-collapsed .nav-link {
-  @apply px-4 justify-center;
+.nav-item-active {
+  @apply bg-white/30 text-white border border-white/40;
 }
 
-.nav-link.active {
-  @apply bg-blue-50 text-blue-600 font-medium border-r-2 border-blue-600;
+.nav-status {
+  @apply flex items-center;
 }
 
-.nav-icon {
-  @apply w-5 h-5 flex items-center justify-center;
-}
-
-.nav-label {
-  @apply text-sm;
-}
-
-.sidebar-footer {
-  @apply px-6 py-4 border-t border-gray-200;
-}
-
-.sidebar-collapsed .sidebar-footer {
-  @apply px-2;
-}
-
-.status-indicator {
-  @apply flex items-center gap-2 text-xs text-gray-500;
+.status-badge {
+  @apply flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-xs text-white;
 }
 
 .status-dot {
-  @apply w-2 h-2 rounded-full;
+  @apply w-2 h-2 bg-green-500 rounded-full animate-pulse;
 }
 
-.status-active {
-  @apply bg-green-500;
+/* Main Content Area */
+.main-area {
+  @apply flex flex-1 min-h-0 overflow-hidden;
+}
+
+/* Sidebar Base Styles */
+.left-sidebar,
+.right-sidebar {
+  @apply flex flex-col bg-zinc-900 border-zinc-800 transition-all duration-300 ease-in-out flex-shrink-0 relative;
+}
+
+.left-sidebar {
+  @apply w-80 border-r;
+}
+
+.right-sidebar {
+  @apply w-[420px] border-l;
+}
+
+.left-sidebar.collapsed,
+.right-sidebar.collapsed {
+  @apply w-12;
+}
+
+/* Sidebar Toggle Button */
+.sidebar-toggle {
+  @apply absolute top-3 z-10 w-6 h-6 flex items-center justify-center bg-zinc-800 border border-zinc-700 rounded-md text-zinc-400 transition-colors;
+  @apply hover:bg-zinc-700 hover:text-zinc-100;
+}
+
+.left-toggle {
+  @apply right-2;
+}
+
+.right-toggle {
+  @apply left-2;
+}
+
+/* Sidebar Tabs */
+.sidebar-tabs {
+  @apply flex items-center gap-1 p-2 border-b border-zinc-800 flex-shrink-0;
+}
+
+.sidebar-tab {
+  @apply flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-400 rounded-md transition-colors;
+  @apply hover:bg-zinc-800 hover:text-zinc-200;
+}
+
+.sidebar-tab.active {
+  @apply bg-violet-600/20 text-violet-400 border border-violet-600/30;
+}
+
+.tab-badge {
+  @apply ml-1 px-1.5 py-0.5 text-[10px] bg-violet-600 text-white rounded-full;
+}
+
+/* Sidebar Content */
+.sidebar-content {
+  @apply flex-1 overflow-hidden;
+}
+
+/* Center Content (Graph Area) */
+.center-content {
+  @apply flex-1 flex flex-col min-w-0 bg-zinc-950;
+}
+
+.graph-header {
+  @apply flex items-center justify-between px-4 py-3 border-b border-zinc-800 flex-shrink-0;
+}
+
+.graph-title {
+  @apply flex items-center gap-3;
+}
+
+.graph-title h1 {
+  @apply text-lg font-semibold text-zinc-100 m-0;
+}
+
+.graph-stats {
+  @apply text-xs text-zinc-500 bg-zinc-800 px-2 py-1 rounded-md;
+}
+
+.graph-actions {
+  @apply flex items-center gap-2;
+}
+
+.action-btn {
+  @apply p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-colors;
+}
+
+.graph-container {
+  @apply flex-1 min-h-0 relative;
+}
+
+/* Graph Explorer Filters */
+.graph-filters {
+  @apply flex items-center gap-6 px-4 py-3 bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 border-b border-violet-900/30 shadow-lg;
+}
+
+.filter-group {
+  @apply flex items-center gap-3;
+}
+
+.filter-label {
+  @apply flex items-center gap-1.5 text-xs font-bold text-violet-400 uppercase tracking-wide;
+}
+
+.filter-control {
+  @apply flex items-center gap-2;
+}
+
+.filter-slider {
+  @apply w-24 h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer;
+}
+
+.filter-slider::-webkit-slider-thumb {
+  @apply appearance-none w-3.5 h-3.5 bg-violet-500 rounded-full cursor-pointer;
+}
+
+.filter-slider::-moz-range-thumb {
+  @apply w-3.5 h-3.5 bg-violet-500 rounded-full cursor-pointer border-none;
+}
+
+.filter-value {
+  @apply text-xs font-mono text-violet-400 bg-violet-900/30 border border-violet-600/30 px-2 py-0.5 rounded min-w-[2rem] text-center font-bold;
+}
+
+.filter-apply-btn {
+  @apply px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-md transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Argumentation Container */
+.argumentation-container {
+  @apply h-full overflow-y-auto p-4;
+}
+
+/* ==========================================
+   Legacy Layout Styles (for other pages)
+   ========================================== */
+
+/* Layout */
+.app-container {
+  @apply flex flex-col min-h-screen bg-zinc-950;
+}
+
+/* Header */
+.header {
+  @apply bg-zinc-900 border-b border-zinc-700 flex-shrink-0 z-50;
+}
+
+.header-content {
+  @apply flex items-center justify-between px-6 py-4;
+}
+
+.header-brand {
+  @apply flex items-center gap-3;
+}
+
+.header-title {
+  @apply text-xl font-bold text-violet-400 m-0;
+}
+
+.header-subtitle {
+  @apply text-xs text-zinc-500 mt-1 m-0;
+}
+
+.header-nav {
+  @apply flex-1 mx-8;
+}
+
+.header-nav .nav-list {
+  @apply flex items-center gap-1 m-0 list-none;
+}
+
+.header-nav .nav-link {
+  @apply flex items-center px-3 py-2 text-zinc-400 no-underline transition-all gap-2 hover:bg-zinc-800 hover:text-zinc-100 rounded-lg;
+}
+
+.header-nav .nav-icon {
+  @apply w-4 h-4 flex items-center justify-center text-xs;
+}
+
+.header-nav .nav-label {
+  @apply text-sm;
+}
+
+.header-status {
+  @apply flex items-center;
+}
+
+/* Main Layout */
+.main-layout {
+  @apply flex flex-1 min-h-0;
+}
+
+/* Context Graph Panel (Left) */
+.context-graph-panel {
+  @apply w-80 bg-zinc-900 border-r border-zinc-700 flex flex-col flex-shrink-0 transition-all duration-300;
+}
+
+.context-graph-panel-collapsed {
+  @apply w-12;
+}
+
+.panel-header {
+  @apply flex items-center justify-between p-4 border-b border-zinc-700 flex-shrink-0;
+}
+
+.panel-title {
+  @apply text-sm font-semibold text-zinc-100;
+}
+
+.panel-toggle-btn {
+  @apply p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-md transition-colors;
+}
+
+.panel-content {
+  @apply flex-1 overflow-hidden;
+}
+
+.graph-container-legacy {
+  @apply h-full flex flex-col;
+}
+
+.graph-stats-legacy {
+  @apply p-2 border-t border-zinc-700 bg-zinc-800 flex-shrink-0;
+}
+
+.empty-state {
+  @apply flex flex-col items-center justify-center h-full p-6 text-center;
 }
 
 /* Main Content */
 .main-content {
-  @apply flex-1 ml-64 p-8 bg-white transition-all duration-300;
+  @apply flex-1 overflow-auto bg-zinc-950;
 }
 
-.sidebar-collapsed ~ .main-content {
-  @apply ml-20;
+/* Chat Panel (Right) */
+.chat-panel {
+  @apply w-96 bg-zinc-900 border-l border-zinc-700 flex flex-col flex-shrink-0 transition-all duration-300;
 }
+
+.chat-panel-collapsed {
+  @apply w-12;
+}
+
+/* Panel Overlay */
+.panel-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 z-30;
+}
+
+/* ==========================================
+   UI Components
+   ========================================== */
 
 /* Cards */
 .card {
-  @apply bg-white border border-gray-200 rounded-lg p-6 shadow-sm transition-all hover:shadow-md;
+  @apply bg-zinc-900 border border-zinc-700 rounded-lg p-6 shadow-sm transition-all hover:shadow-md;
 }
 
 .card-header {
@@ -140,15 +432,15 @@
 }
 
 .card-title {
-  @apply text-lg font-semibold text-gray-900 mb-1;
+  @apply text-lg font-semibold text-zinc-100 mb-1;
 }
 
 .card-description {
-  @apply text-sm text-gray-500;
+  @apply text-sm text-zinc-500;
 }
 
 .card-content {
-  @apply text-gray-800;
+  @apply text-zinc-200;
 }
 
 /* Buttons */
@@ -157,39 +449,39 @@
 }
 
 .btn-primary {
-  @apply bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md;
+  @apply bg-violet-600 text-white hover:bg-violet-700 shadow-sm hover:shadow-md;
 }
 
 .btn-secondary {
-  @apply bg-gray-100 text-gray-900 hover:bg-gray-200;
+  @apply bg-zinc-800 text-zinc-100 hover:bg-zinc-700;
 }
 
 .btn-outline {
-  @apply border border-gray-300 text-gray-700 hover:bg-gray-50;
+  @apply border border-zinc-700 text-zinc-300 hover:bg-zinc-800;
 }
 
 /* Inputs */
 input[type="text"],
 input[type="email"],
 textarea {
-  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+  @apply w-full px-3 py-2 bg-zinc-900 border border-zinc-700 text-zinc-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent;
 }
 
 /* Typography */
 h1 {
-  @apply text-3xl font-bold text-gray-900 mb-4;
+  @apply text-3xl font-bold text-zinc-100 mb-4;
 }
 
 h2 {
-  @apply text-2xl font-semibold text-gray-900 mb-3;
+  @apply text-2xl font-semibold text-zinc-100 mb-3;
 }
 
 h3 {
-  @apply text-xl font-semibold text-gray-900 mb-2;
+  @apply text-xl font-semibold text-zinc-100 mb-2;
 }
 
 .muted {
-  @apply text-gray-500 text-sm;
+  @apply text-zinc-500 text-sm;
 }
 
 /* Section */
@@ -197,7 +489,10 @@ h3 {
   @apply mb-8;
 }
 
-/* Chat specific styles */
+/* ==========================================
+   Chat Specific Styles
+   ========================================== */
+
 .message-container {
   @apply flex gap-3 mb-4;
 }
@@ -207,11 +502,11 @@ h3 {
 }
 
 .message-avatar.user {
-  @apply bg-gray-100 text-gray-600;
+  @apply bg-zinc-800 text-zinc-400;
 }
 
 .message-avatar.assistant {
-  @apply bg-blue-100 text-blue-600;
+  @apply bg-violet-900/30 text-violet-400;
 }
 
 .message-content {
@@ -223,14 +518,17 @@ h3 {
 }
 
 .message-bubble.user {
-  @apply bg-gray-50 border border-gray-200;
+  @apply bg-zinc-800 border border-zinc-700;
 }
 
 .message-bubble.assistant {
-  @apply bg-white border border-gray-200;
+  @apply bg-zinc-900 border border-zinc-700;
 }
 
-/* Animations */
+/* ==========================================
+   Animations
+   ========================================== */
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -263,21 +561,24 @@ h3 {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Prose styling for markdown */
+/* ==========================================
+   Prose Styling for Markdown
+   ========================================== */
+
 .prose-blue h1, .prose-blue h2, .prose-blue h3 {
-  @apply text-blue-900;
+  @apply text-violet-400;
 }
 
 .prose-blue strong {
-  @apply text-gray-900 font-bold;
+  @apply text-zinc-100 font-bold;
 }
 
 .prose-blue code {
-  @apply bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm;
+  @apply bg-zinc-800 text-rose-400 px-1.5 py-0.5 rounded text-sm;
 }
 
 .prose-blue pre {
-  @apply bg-gray-900 text-green-400 rounded-lg p-4 overflow-x-auto;
+  @apply bg-zinc-900 text-green-400 rounded-lg p-4 overflow-x-auto border border-zinc-700;
 }
 
 .prose-blue ul, .prose-blue ol {
@@ -289,27 +590,34 @@ h3 {
 }
 
 .prose-blue p {
-  @apply my-2 leading-relaxed;
+  @apply my-2 leading-relaxed text-zinc-300;
 }
 
 .prose-blue a {
-  @apply text-blue-600 hover:text-blue-800 underline;
+  @apply text-violet-400 hover:text-violet-300 underline;
 }
 
-/* Scrollbar styling */
+/* ==========================================
+   Scrollbar Styling
+   ========================================== */
+
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  @apply bg-zinc-900;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-full hover:bg-gray-400;
+  @apply bg-zinc-700 rounded-full hover:bg-zinc-600;
 }
 
-/* Chat page fullscreen override */
+/* ==========================================
+   Chat Fullscreen Override
+   ========================================== */
+
 .chat-fullscreen {
   margin: -2rem;
   height: 100vh;
@@ -317,9 +625,39 @@ h3 {
   overflow: hidden;
 }
 
-/* Responsive */
+/* ==========================================
+   Responsive Styles
+   ========================================== */
+
+@media (max-width: 1280px) {
+  .left-sidebar {
+    @apply w-64;
+  }
+  .right-sidebar {
+    @apply w-80;
+  }
+}
+
+@media (max-width: 1024px) {
+  .left-sidebar {
+    @apply w-56;
+  }
+  .right-sidebar {
+    @apply w-72;
+  }
+  .nav-links {
+    @apply hidden;
+  }
+}
+
 @media (max-width: 768px) {
-  .sidebar {
+  .left-sidebar,
+  .right-sidebar {
+    @apply hidden;
+  }
+
+  .left-sidebar.collapsed,
+  .right-sidebar.collapsed {
     @apply hidden;
   }
 
@@ -330,4 +668,25 @@ h3 {
   .chat-fullscreen {
     margin: 0;
   }
+}
+
+/* Status indicator styles */
+.status-indicator {
+  @apply flex items-center gap-2 px-3 py-1.5 bg-zinc-800 rounded-full text-xs text-zinc-400;
+}
+
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-active {
+  @apply bg-green-500;
+}
+
+.status-inactive {
+  @apply bg-zinc-500;
+}
+
+.status-error {
+  @apply bg-red-500;
 }

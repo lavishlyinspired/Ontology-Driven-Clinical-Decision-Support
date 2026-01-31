@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Survival Curves</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --color-bg: #0f0f14;
+      --color-surface: #1a1a24;
+      --color-elevated: #242430;
+      --color-text: #f4f4f5;
+      --color-text-muted: #a1a1aa;
+      --color-accent: #7c3aed;
+      --color-success: #22c55e;
+      --color-warning: #f59e0b;
+      --color-border: #374151;
+      --color-pembrolizumab: #8b5cf6;
+      --color-chemotherapy: #f59e0b;
+      --color-osimertinib: #22c55e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .header h2 {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header h2::before {
+      content: '📈';
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .control-group label {
+      font-size: 10px;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+    }
+
+    select, button {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    select {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      color: var(--color-text);
+    }
+
+    .chart-container {
+      background: var(--color-surface);
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid var(--color-border);
+      height: 280px;
+      position: relative;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 12px;
+      background: var(--color-surface);
+      border-radius: 8px;
+      border: 1px solid var(--color-border);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--color-surface);
+      border-radius: 8px;
+      padding: 12px;
+      border: 1px solid var(--color-border);
+    }
+
+    .stat-card .label {
+      font-size: 10px;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .value {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .stat-card .subtext {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      margin-top: 2px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: var(--color-accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #6d28d9;
+    }
+
+    .btn-secondary {
+      background: var(--color-elevated);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-surface);
+    }
+
+    .info-banner {
+      background: rgba(124, 58, 237, 0.1);
+      border: 1px solid rgba(124, 58, 237, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--color-text-muted);
+    }
+
+    .hr-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--color-success);
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <div class="header">
+      <h2>Kaplan-Meier Survival Curves</h2>
+      <div class="controls">
+        <div class="control-group">
+          <label>Endpoint</label>
+          <select id="endpoint-select" onchange="updateChart()">
+            <option value="os">Overall Survival (OS)</option>
+            <option value="pfs">Progression-Free Survival (PFS)</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Time</label>
+          <select id="time-select" onchange="updateChart()">
+            <option value="36">36 Months</option>
+            <option value="24">24 Months</option>
+            <option value="60">60 Months</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="survivalChart"></canvas>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-color" style="background: var(--color-pembrolizumab)"></div>
+        <span>Pembrolizumab + Chemo</span>
+        <span class="hr-indicator">HR 0.49</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background: var(--color-chemotherapy)"></div>
+        <span>Chemotherapy Alone</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background: var(--color-osimertinib)"></div>
+        <span>Osimertinib (EGFR+)</span>
+        <span class="hr-indicator">HR 0.46</span>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">Median OS (Pembrolizumab)</div>
+        <div class="value" style="color: var(--color-pembrolizumab)">22.0 mo</div>
+        <div class="subtext">95% CI: 19.5-25.2</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Median OS (Chemo)</div>
+        <div class="value" style="color: var(--color-chemotherapy)">10.6 mo</div>
+        <div class="subtext">95% CI: 8.7-13.6</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Median OS (Osimertinib)</div>
+        <div class="value" style="color: var(--color-osimertinib)">38.6 mo</div>
+        <div class="subtext">EGFR+ only</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Hazard Ratio</div>
+        <div class="value">0.49</div>
+        <div class="subtext">p < 0.001</div>
+      </div>
+    </div>
+
+    <div class="info-banner">
+      📋 Data sources: KEYNOTE-189 (Pembrolizumab), FLAURA (Osimertinib). Survival curves are illustrative based on published trial data.
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="exportData()">
+        ⬇️ Export Data
+      </button>
+      <button class="btn btn-secondary" onclick="compareMore()">
+        ➕ Add Cohort
+      </button>
+      <button class="btn btn-primary" onclick="selectTreatment()">
+        ✓ Apply to Patient
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Survival data (Kaplan-Meier style)
+    const survivalData = {
+      os: {
+        pembrolizumab: [100, 95, 88, 80, 72, 65, 58, 52, 47, 43, 40, 38, 35, 33, 31, 30, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8],
+        chemotherapy: [100, 90, 78, 65, 52, 42, 35, 30, 26, 23, 20, 18, 16, 14, 12, 11, 10, 9, 8, 7, 6, 5, 5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1],
+        osimertinib: [100, 98, 95, 92, 89, 85, 82, 79, 76, 73, 70, 68, 65, 63, 60, 58, 55, 53, 50, 48, 45, 43, 40, 38, 35, 33, 30, 28, 25, 23, 20, 18, 15, 13, 10, 8, 5]
+      },
+      pfs: {
+        pembrolizumab: [100, 92, 82, 70, 58, 48, 40, 35, 31, 28, 25, 23, 21, 19, 17, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 5, 4, 4, 3, 3, 2, 2, 2, 1, 1, 1],
+        chemotherapy: [100, 85, 68, 50, 35, 25, 18, 14, 11, 9, 7, 6, 5, 4, 3, 3, 2, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        osimertinib: [100, 96, 90, 84, 78, 72, 66, 60, 55, 50, 46, 42, 38, 35, 32, 29, 27, 25, 23, 21, 19, 17, 15, 14, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 3, 2, 2]
+      }
+    };
+
+    let chart = null;
+
+    function createChart() {
+      const ctx = document.getElementById('survivalChart').getContext('2d');
+      const endpoint = document.getElementById('endpoint-select').value;
+      const maxTime = parseInt(document.getElementById('time-select').value);
+
+      const data = survivalData[endpoint];
+      const labels = Array.from({ length: maxTime + 1 }, (_, i) => i);
+
+      if (chart) {
+        chart.destroy();
+      }
+
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Pembrolizumab + Chemo',
+              data: data.pembrolizumab.slice(0, maxTime + 1),
+              borderColor: '#8b5cf6',
+              backgroundColor: 'rgba(139, 92, 246, 0.1)',
+              fill: true,
+              tension: 0.1,
+              stepped: 'before',
+              borderWidth: 2
+            },
+            {
+              label: 'Chemotherapy Alone',
+              data: data.chemotherapy.slice(0, maxTime + 1),
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              fill: true,
+              tension: 0.1,
+              stepped: 'before',
+              borderWidth: 2
+            },
+            {
+              label: 'Osimertinib (EGFR+)',
+              data: data.osimertinib.slice(0, maxTime + 1),
+              borderColor: '#22c55e',
+              backgroundColor: 'rgba(34, 197, 94, 0.1)',
+              fill: true,
+              tension: 0.1,
+              stepped: 'before',
+              borderWidth: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${context.parsed.y}%`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Time (Months)',
+                color: '#a1a1aa'
+              },
+              ticks: {
+                color: '#a1a1aa'
+              },
+              grid: {
+                color: '#374151'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: endpoint === 'os' ? 'Overall Survival (%)' : 'Progression-Free Survival (%)',
+                color: '#a1a1aa'
+              },
+              min: 0,
+              max: 100,
+              ticks: {
+                color: '#a1a1aa',
+                callback: function(value) {
+                  return value + '%';
+                }
+              },
+              grid: {
+                color: '#374151'
+              }
+            }
+          },
+          interaction: {
+            mode: 'nearest',
+            axis: 'x',
+            intersect: false
+          }
+        }
+      });
+    }
+
+    function updateChart() {
+      createChart();
+    }
+
+    function exportData() {
+      sendMessage('Export survival curve data for this patient cohort');
+    }
+
+    function compareMore() {
+      sendMessage('Add another treatment cohort to compare survival curves');
+    }
+
+    function selectTreatment() {
+      sendMessage('Based on the survival analysis, Pembrolizumab + Chemotherapy shows superior overall survival (HR 0.49, p<0.001) with median OS of 22.0 months vs 10.6 months for chemotherapy alone.');
+    }
+
+    function sendMessage(text) {
+      window.parent.postMessage({
+        jsonrpc: '2.0',
+        id: `msg-${Date.now()}`,
+        method: 'ui/message',
+        params: { content: text }
+      }, '*');
+    }
+
+    // Initialize
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+
+      if (data.method === 'ui/notifications/tool-input' || data.method === 'ui/notifications/tool-result') {
+        // Could update chart based on patient-specific data
+        console.log('[SurvivalCurves] Received:', data);
+      }
+    });
+
+    // Send initialize
+    window.parent.postMessage({
+      jsonrpc: '2.0',
+      id: 'init-1',
+      method: 'ui/initialize',
+      params: {
+        appInfo: { name: 'Survival Curves', version: '1.0.0' },
+        capabilities: { tools: true, messages: true }
+      }
+    }, '*');
+
+    // Create chart on load
+    createChart();
+  </script>
+</body>
+</html>

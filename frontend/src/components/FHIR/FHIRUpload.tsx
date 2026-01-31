@@ -146,10 +146,11 @@ export default function FHIRUpload() {
                     className="hidden"
                     id="file-upload"
                   />
-                  <label htmlFor="file-upload">
-                    <Button variant="outline" asChild>
-                      <span>Select File</span>
-                    </Button>
+                  <label
+                    htmlFor="file-upload"
+                    className="inline-flex items-center justify-center rounded-md font-medium transition-colors border border-[#1e293b] bg-transparent hover:bg-[#1e293b] text-[#f8fafc] h-10 px-4 py-2 cursor-pointer"
+                  >
+                    Select File
                   </label>
                 </>
               )}

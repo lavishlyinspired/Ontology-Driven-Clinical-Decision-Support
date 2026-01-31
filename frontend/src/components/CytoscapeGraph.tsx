@@ -66,6 +66,7 @@ export function CytoscapeGraph({
   // Update internal graph data when prop changes
   useEffect(() => {
     if (graphData) {
+      console.log('[CytoscapeGraph] Received new graph data:', graphData.nodes.length, 'nodes,', graphData.relationships.length, 'rels')
       setInternalGraphData(graphData)
       setExpandedNodeIds(new Set())
     }
@@ -109,8 +110,12 @@ export function CytoscapeGraph({
 
   // Initialize Cytoscape
   useEffect(() => {
-    if (!containerRef.current || !internalGraphData || internalGraphData.nodes.length === 0) return
+    if (!containerRef.current || !internalGraphData || internalGraphData.nodes.length === 0) {
+      console.log('[CytoscapeGraph] Skipping initialization - containerRef:', !!containerRef.current, 'internalGraphData:', !!internalGraphData, 'nodes:', internalGraphData?.nodes.length || 0)
+      return
+    }
 
+    console.log('[CytoscapeGraph] Initializing Cytoscape with', internalGraphData.nodes.length, 'nodes')
     setIsLoading(true)
 
     // Convert graph data to Cytoscape format
