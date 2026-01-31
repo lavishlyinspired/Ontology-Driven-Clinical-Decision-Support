@@ -462,6 +462,55 @@ Try describing a patient to get started!`,
                   logsRef.current = newLogs
                   return newLogs
                 })
+              } else if (data.type === 'tool_call') {
+                // MCP tool invocation
+                console.log('[LCA] Tool call:', data.content)
+                setWorkflowSteps(prev => [...prev, {
+                  id: crypto.randomUUID(),
+                  content: `🔧 Invoking tool: ${data.content.tool}`,
+                  status: 'active' as const,
+                  timestamp: new Date().toLocaleTimeString()
+                }])
+                // Store tool call in message metadata
+                setMessages(prev => prev.map(msg =>
+                  msg.id === assistantId
+                    ? {
+                        ...msg,
+                        toolCalls: [...(msg.toolCalls || []), {
+                          name: data.content.tool,
+                          input: data.content.arguments
+                        }]
+                      }
+                    : msg
+                ))
+              } else if (data.type === 'tool_result') {
+                // MCP tool result
+                console.log('[LCA] Tool result:', data.content)
+                setWorkflowSteps(prev => {
+                  const updated = prev.map(step =>
+                    step.status === 'active' && step.content.includes('Invoking tool')
+                      ? { ...step, status: 'completed' as const }
+                      : step
+                  )
+                  return [...updated, {
+                    id: crypto.randomUUID(),
+                    content: '✅ Tool execution completed',
+                    status: 'completed' as const,
+                    timestamp: new Date().toLocaleTimeString()
+                  }]
+                })
+                // Update last tool call with result
+                setMessages(prev => prev.map(msg => {
+                  if (msg.id === assistantId && msg.toolCalls && msg.toolCalls.length > 0) {
+                    const updatedToolCalls = [...msg.toolCalls]
+                    updatedToolCalls[updatedToolCalls.length - 1] = {
+                      ...updatedToolCalls[updatedToolCalls.length - 1],
+                      output: data.content
+                    }
+                    return { ...msg, toolCalls: updatedToolCalls }
+                  }
+                  return msg
+                }))
               } else if (data.type === 'graph_data') {
                 // Graph visualization data
                 console.log('[LCA] Received graph_data:', data.content)
@@ -695,6 +744,40 @@ Try describing a patient to get started!`,
                     </div>
                   )}
                 </div>
+
+                {/* Tool Calls Display */}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {msg.toolCalls.map((toolCall, idx) => (
+                      <div key={idx} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Zap className="w-4 h-4 text-yellow-400" />
+                          <span className="text-sm font-semibold text-yellow-400">
+                            Tool: {toolCall.name}
+                          </span>
+                        </div>
+                        {Object.keys(toolCall.input).length > 0 && (
+                          <details className="text-xs text-gray-400 mb-2">
+                            <summary className="cursor-pointer hover:text-gray-300">Input</summary>
+                            <pre className="mt-2 p-2 bg-slate-900 rounded overflow-x-auto">
+                              {JSON.stringify(toolCall.input, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                        {toolCall.output && (
+                          <details className="text-xs text-gray-400" open>
+                            <summary className="cursor-pointer hover:text-gray-300">Result</summary>
+                            <pre className="mt-2 p-2 bg-slate-900 rounded overflow-x-auto text-green-400">
+                              {typeof toolCall.output === 'string'
+                                ? toolCall.output
+                                : JSON.stringify(toolCall.output, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* MCP App Inline Rendering */}
                 {msg.mcpApp && (

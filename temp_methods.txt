@@ -1,0 +1,94 @@
+
+    # ========================================================================
+    # MCP APPS AND CLUSTERING METHODS
+    # ========================================================================
+
+    async def _stream_mcp_app(self, message: str, session_id: str) -> AsyncIterator[str]:
+        """Stream MCP app rendering based on user query"""
+        
+        message_lower = message.lower()
+        
+        # Treatment Comparison App
+        if any(kw in message_lower for kw in ['compare treatment', 'treatment comparison', 'treatment options']):
+            yield self._format_sse({"type": "status", "content": "Loading treatment comparison tool..."})
+            
+            treatments_data = await self._get_treatment_comparison_data(session_id)
+            
+            yield self._format_sse({
+                "type": "mcp_app",
+                "content": {
+                    "resourceUri": "/mcp-apps/treatment-compare.html",
+                    "input": treatments_data,
+                    "title": "Treatment Comparison"
+                }
+            })
+            
+            explanation = self._explain_treatment_comparison(treatments_data)
+            yield self._format_sse({"type": "text", "content": explanation})
+        
+        # Survival Curves App
+        elif any(kw in message_lower for kw in ['survival curve', 'kaplan meier', 'survival data']):
+            yield self._format_sse({"type": "status", "content": "Generating survival curves..."})
+            
+            curves_data = await self._get_survival_curves_data(session_id)
+            
+            yield self._format_sse({
+                "type": "mcp_app",
+                "content": {
+                    "resourceUri": "/mcp-apps/survival-curves.html",
+                    "input": curves_data,
+                    "title": "Survival Analysis"
+                }
+            })
+            
+            explanation = self._explain_survival_curves(curves_data)
+            yield self._format_sse({"type": "text", "content": explanation})
+        
+        # Guideline Tree App
+        elif any(kw in message_lower for kw in ['guideline tree', 'nccn decision', 'decision tree']):
+            yield self._format_sse({"type": "status", "content": "Loading NCCN guideline decision tree..."})
+            
+            guideline_data = await self._get_guideline_tree_data(session_id)
+            
+            yield self._format_sse({
+                "type": "mcp_app",
+                "content": {
+                    "resourceUri": "/mcp-apps/guideline-tree.html",
+                    "input": guideline_data,
+                    "title": "NCCN Guideline Explorer"
+                }
+            })
+            
+            explanation = self._explain_guideline_tree(guideline_data)
+            yield self._format_sse({"type": "text", "content": explanation})
+        
+        # Clinical Trial Matcher App
+        elif any(kw in message_lower for kw in ['clinical trial', 'trial match', 'trial search']):
+            yield self._format_sse({"type": "status", "content": "Searching clinical trials..."})
+            
+            trials = await self._match_clinical_trials(session_id)
+            
+            yield self._format_sse({
+                "type": "mcp_app",
+                "content": {
+                    "resourceUri": "/mcp-apps/trial-matcher.html",
+                    "input": trials,
+                    "title": "Clinical Trial Matcher"
+                }
+            })
+            
+            explanation = self._explain_trial_matches(trials)
+            yield self._format_sse({"type": "text", "content": explanation})
+        
+        else:
+            # No matching app found
+            yield self._format_sse({
+                "type": "text",
+                "content": "I can show you interactive visualizations for:\n"
+                          "- **Treatment Comparison**: Compare treatment options side-by-side\n"
+                          "- **Survival Curves**: Kaplan-Meier survival analysis\n"
+                          "- **Guideline Tree**: Navigate NCCN decision pathways\n"
+                          "- **Clinical Trials**: Match patients to trials\n\n"
+                          "Try asking: 'Compare treatments' or 'Show survival curves'"
+            })
+
