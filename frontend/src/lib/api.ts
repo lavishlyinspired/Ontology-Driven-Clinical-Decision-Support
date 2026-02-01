@@ -96,6 +96,121 @@ export interface AgentContext {
   mcp_server?: string;
 }
 
+// Lab Results Types
+export interface LabResult {
+  id?: string;
+  loinc_code: string;
+  loinc_name?: string;
+  test_name?: string;
+  value: number | string;
+  units?: string;
+  unit?: string;
+  reference_range?: string;
+  interpretation?: "normal" | "high" | "low" | "critical" | "abnormal";
+  severity?: "normal" | "grade1" | "grade2" | "grade3" | "grade4" | "critical";
+  test_date?: string;
+  lab_category?: string;
+}
+
+export interface LabInterpretation extends LabResult {
+  clinical_significance?: string;
+  recommendation?: string;
+  ctcae_grade?: string;
+}
+
+// Medication Types
+export interface Medication {
+  id?: string;
+  rxcui?: string;
+  drug_name: string;
+  name?: string;
+  drug_class?: string;
+  dose?: string;
+  route?: string;
+  frequency?: string;
+  start_date?: string;
+  end_date?: string;
+  status?: "active" | "inactive" | "discontinued";
+}
+
+export interface DrugInteraction {
+  id?: string;
+  drug1?: string;
+  drug2?: string;
+  drug1_rxcui?: string;
+  drug2_rxcui?: string;
+  severity: "SEVERE" | "MODERATE" | "MILD";
+  mechanism?: string;
+  clinical_effect?: string;
+  recommendation?: string;
+}
+
+// Monitoring Protocol Types
+export interface MonitoringProtocol {
+  id?: string;
+  protocol_name?: string;
+  regimen: string;
+  frequency?: string;
+  duration?: string;
+  tests_to_monitor?: string[] | Array<{
+    loinc_code?: string;
+    loinc_name?: string;
+    name?: string;
+    frequency?: string;
+  }>;
+  schedule?: Array<{
+    week?: number;
+    day?: number;
+    tests?: string[];
+  }>;
+  dose_adjustments?: Array<{
+    parameter?: string;
+    threshold?: string;
+    action?: string;
+  }>;
+  created_date?: string;
+}
+
+// Clinical Trial Types
+export interface ClinicalTrial {
+  nct_id: string;
+  title?: string;
+  brief_title?: string;
+  phase?: string;
+  status?: string;
+  condition?: string;
+  intervention?: string;
+  eligibility_score?: number;
+  match_score?: number;
+  eligibility_criteria?: string[];
+  matched_criteria?: string[];
+}
+
+// SSE Event Types
+export type SSEEventType =
+  | "status"
+  | "progress"
+  | "reasoning"
+  | "patient_data"
+  | "complexity"
+  | "recommendation"
+  | "text"
+  | "log"
+  | "error"
+  | "graph_data"
+  | "suggestions"
+  | "lab_results"
+  | "drug_interactions"
+  | "monitoring_protocol"
+  | "eligible_trials";
+
+export interface SSEEvent {
+  type: SSEEventType;
+  content: any;
+  level?: string;
+  timestamp?: string;
+}
+
 export interface ToolCall {
   name: string;
   input: Record<string, unknown>;
@@ -270,6 +385,231 @@ export async function getCausalChain(
     effects: [],
     depth,
   };
+}
+
+// ============================================
+// LABORATORY API
+// ============================================
+
+export async function interpretLabResult(
+  loincCode: string,
+  value: number,
+  units: string,
+  patientContext?: any
+): Promise<LabInterpretation> {
+  const response = await apiClient.post("/api/v1/laboratory/interpret", {
+    loinc_code: loincCode,
+    value,
+    units,
+    patient_context: patientContext,
+  });
+  return response.data;
+}
+
+export async function getLabPanel(panelType: string): Promise<LabResult[]> {
+  const response = await apiClient.get(`/api/v1/laboratory/panels/${panelType}`);
+  return response.data;
+}
+
+export async function batchInterpretLabs(
+  patientId: string,
+  labResults: LabResult[]
+): Promise<{ interpretations: LabInterpretation[]; critical_flags: any[] }> {
+  const response = await apiClient.post("/api/v1/laboratory/batch-interpret", {
+    patient_id: patientId,
+    lab_results: labResults,
+  });
+  return response.data;
+}
+
+export async function getPatientLabs(
+  patientId: string,
+  startDate?: string,
+  endDate?: string,
+  loincCode?: string
+): Promise<LabResult[]> {
+  const params: any = {};
+  if (startDate) params.start_date = startDate;
+  if (endDate) params.end_date = endDate;
+  if (loincCode) params.loinc_code = loincCode;
+
+  const response = await apiClient.get(`/api/v1/patients/${patientId}/labs`, {
+    params,
+  });
+  return response.data;
+}
+
+export async function searchLoincCodes(
+  query: string,
+  category: string = "all"
+): Promise<any[]> {
+  const response = await apiClient.get("/api/v1/laboratory/search", {
+    params: { q: query, category },
+  });
+  return response.data;
+}
+
+// ============================================
+// MEDICATIONS API
+// ============================================
+
+export async function searchMedications(query: string): Promise<Medication[]> {
+  const response = await apiClient.get("/api/v1/medications/search", {
+    params: { q: query },
+  });
+  return response.data;
+}
+
+export async function checkDrugInteractions(
+  drugList: string[]
+): Promise<{ interactions: DrugInteraction[] }> {
+  const response = await apiClient.post("/api/v1/medications/interactions", {
+    drug_list: drugList,
+  });
+  return response.data;
+}
+
+export async function getTherapeuticAlternatives(
+  rxcui: string
+): Promise<Medication[]> {
+  const response = await apiClient.get(
+    `/api/v1/medications/${rxcui}/alternatives`
+  );
+  return response.data;
+}
+
+export async function getMedicationDetails(rxcui: string): Promise<any> {
+  const response = await apiClient.get(`/api/v1/medications/${rxcui}/details`);
+  return response.data;
+}
+
+export async function getPatientMedications(
+  patientId: string,
+  activeOnly: boolean = true
+): Promise<Medication[]> {
+  const response = await apiClient.get(
+    `/api/v1/patients/${patientId}/medications`,
+    {
+      params: { active_only: activeOnly },
+    }
+  );
+  return response.data;
+}
+
+export async function addPatientMedication(
+  patientId: string,
+  medication: Medication
+): Promise<{ medication: Medication; interactions: DrugInteraction[] }> {
+  const response = await apiClient.post(
+    `/api/v1/patients/${patientId}/medications`,
+    medication
+  );
+  return response.data;
+}
+
+// ============================================
+// MONITORING API
+// ============================================
+
+export async function getMonitoringProtocol(
+  regimen: string
+): Promise<MonitoringProtocol> {
+  const response = await apiClient.get(
+    `/api/v1/monitoring/protocols/${regimen}`
+  );
+  return response.data;
+}
+
+export async function assessDoseAdjustment(
+  drugName: string,
+  labResults: LabResult[]
+): Promise<{
+  dose_adjustment_needed: boolean;
+  recommendation: string;
+  rationale: string;
+}> {
+  const response = await apiClient.post("/api/v1/monitoring/assess-dose", {
+    drug_name: drugName,
+    lab_results: labResults,
+  });
+  return response.data;
+}
+
+export async function predictLabEffects(drugName: string): Promise<any[]> {
+  const response = await apiClient.get(
+    `/api/v1/monitoring/predict-effects/${drugName}`
+  );
+  return response.data;
+}
+
+export async function getPatientMonitoringProtocol(
+  patientId: string
+): Promise<MonitoringProtocol> {
+  const response = await apiClient.get(
+    `/api/v1/patients/${patientId}/monitoring-protocol`
+  );
+  return response.data;
+}
+
+export async function createPatientMonitoringProtocol(
+  patientId: string,
+  regimen: string,
+  startDate: string
+): Promise<MonitoringProtocol> {
+  const response = await apiClient.post(
+    `/api/v1/patients/${patientId}/monitoring-protocol`,
+    {
+      regimen,
+      start_date: startDate,
+    }
+  );
+  return response.data;
+}
+
+// ============================================
+// CLINICAL TRIALS API
+// ============================================
+
+export async function searchClinicalTrials(params: {
+  condition?: string;
+  intervention?: string;
+  phase?: string;
+  status?: string;
+}): Promise<ClinicalTrial[]> {
+  const response = await apiClient.get("/api/v1/clinical-trials/search", {
+    params,
+  });
+  return response.data;
+}
+
+export async function matchPatientToTrials(
+  patientId: string
+): Promise<{ trials: ClinicalTrial[] }> {
+  const response = await apiClient.post("/api/v1/clinical-trials/match-patient", {
+    patient_id: patientId,
+  });
+  return response.data;
+}
+
+export async function getClinicalTrial(nctId: string): Promise<ClinicalTrial> {
+  const response = await apiClient.get(`/api/v1/clinical-trials/${nctId}`);
+  return response.data;
+}
+
+export async function storeClinicalTrial(nctId: string): Promise<any> {
+  const response = await apiClient.post(
+    `/api/v1/clinical-trials/${nctId}/store`
+  );
+  return response.data;
+}
+
+export async function getPatientEligibleTrials(
+  patientId: string
+): Promise<ClinicalTrial[]> {
+  const response = await apiClient.get(
+    `/api/v1/patients/${patientId}/eligible-trials`
+  );
+  return response.data;
 }
 
 // ============================================

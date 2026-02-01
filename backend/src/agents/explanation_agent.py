@@ -51,19 +51,31 @@ class ExplanationAgent:
         self.version = "1.0.0"
 
     def execute(
-        self, 
+        self,
         patient: PatientFactWithCodes,
         classification: ClassificationResult,
-        inference_id: Optional[str] = None
+        inference_id: Optional[str] = None,
+        lab_results: Optional[List[Dict]] = None,
+        lab_interpretations: Optional[List[Dict]] = None,
+        medications: Optional[List[Dict]] = None,
+        drug_interactions: Optional[List[Dict]] = None,
+        monitoring_protocol: Optional[Dict] = None,
+        eligible_trials: Optional[List[Dict]] = None
     ) -> MDTSummary:
         """
         Execute explanation generation: create MDT-ready summary.
-        
+
         Args:
             patient: Patient data with SNOMED codes
             classification: Classification results with recommendations
             inference_id: Optional ID of saved inference record
-            
+            lab_results: Optional lab results data
+            lab_interpretations: Optional lab interpretations
+            medications: Optional medications list
+            drug_interactions: Optional drug interactions list
+            monitoring_protocol: Optional monitoring protocol
+            eligible_trials: Optional clinical trials list
+
         Returns:
             MDTSummary ready for clinical review
         """
@@ -71,24 +83,41 @@ class ExplanationAgent:
 
         # Generate clinical summary
         clinical_summary = self._generate_clinical_summary(patient, classification)
-        
+
         # Format recommendations for MDT
         formatted_recommendations = self._format_recommendations(classification.recommendations)
-        
+
         # Generate reasoning explanation
         reasoning_explanation = self._explain_reasoning(classification.reasoning_chain)
-        
+
         # Create key considerations
         key_considerations = self._identify_key_considerations(patient, classification)
-        
+
         # Generate discussion points for MDT
         discussion_points = self._generate_discussion_points(patient, classification)
+
+        # Generate new sections for lab/medication/monitoring/trials
+        lab_section = self._generate_lab_section(lab_interpretations) if lab_interpretations else ""
+        medication_section = self._generate_medication_section(medications, drug_interactions) if medications else ""
+        monitoring_section = self._generate_monitoring_section(monitoring_protocol) if monitoring_protocol else ""
+        trials_section = self._generate_trials_section(eligible_trials) if eligible_trials else ""
+
+        # Combine all sections into extended summary
+        extended_summary = clinical_summary
+        if medication_section:
+            extended_summary += f"\n\n{medication_section}"
+        if lab_section:
+            extended_summary += f"\n\n{lab_section}"
+        if monitoring_section:
+            extended_summary += f"\n\n{monitoring_section}"
+        if trials_section:
+            extended_summary += f"\n\n{trials_section}"
 
         mdt_summary = MDTSummary(
             patient_id=patient.patient_id,
             generated_at=datetime.utcnow(),
             inference_id=inference_id,
-            clinical_summary=clinical_summary,
+            clinical_summary=extended_summary,
             classification_scenario=classification.scenario,
             scenario_confidence=classification.scenario_confidence,
             formatted_recommendations=formatted_recommendations,
@@ -310,6 +339,147 @@ class ExplanationAgent:
             "should be reviewed by the multi-disciplinary team and discussed with the patient. "
             "The treating clinician retains full responsibility for treatment decisions."
         )
+
+    def _generate_lab_section(self, lab_interpretations: List[Dict]) -> str:
+        """Generate laboratory results section for MDT summary."""
+        if not lab_interpretations:
+            return ""
+
+        lines = ["## Laboratory Results"]
+
+        # Identify critical values
+        critical_labs = [
+            lab for lab in lab_interpretations
+            if lab.get('severity') in ['grade3', 'grade4', 'critical']
+        ]
+
+        if critical_labs:
+            lines.append("\n### Critical Values")
+            for lab in critical_labs:
+                loinc_name = lab.get('loinc_name', lab.get('test_name', 'Unknown'))
+                value = lab.get('value', 'N/A')
+                units = lab.get('units', lab.get('unit', ''))
+                interpretation = lab.get('interpretation', '')
+                lines.append(f"- 🔴 **{loinc_name}**: {value} {units} ({interpretation})")
+
+        # List all abnormal values
+        abnormal_labs = [
+            lab for lab in lab_interpretations
+            if lab.get('interpretation') in ['high', 'low', 'abnormal']
+            and lab.get('severity') not in ['grade3', 'grade4', 'critical']
+        ]
+
+        if abnormal_labs:
+            lines.append("\n### Abnormal Values")
+            for lab in abnormal_labs:
+                loinc_name = lab.get('loinc_name', lab.get('test_name', 'Unknown'))
+                value = lab.get('value', 'N/A')
+                units = lab.get('units', lab.get('unit', ''))
+                interpretation = lab.get('interpretation', '')
+                severity = lab.get('severity', '')
+                lines.append(f"- ⚠️ {loinc_name}: {value} {units} ({interpretation}, {severity})")
+
+        return "\n".join(lines)
+
+    def _generate_medication_section(self, medications: List[Dict], drug_interactions: List[Dict] = None) -> str:
+        """Generate medications section for MDT summary."""
+        if not medications:
+            return ""
+
+        lines = ["## Current Medications"]
+
+        for med in medications:
+            drug_name = med.get('drug_name', med.get('name', 'Unknown'))
+            dose = med.get('dose', '')
+            route = med.get('route', '')
+            frequency = med.get('frequency', '')
+            lines.append(f"- {drug_name} {dose} {route} {frequency}".strip())
+
+        # Add drug interaction warnings
+        if drug_interactions:
+            severe_interactions = [
+                di for di in drug_interactions
+                if di.get('severity', '').upper() == 'SEVERE'
+            ]
+
+            if severe_interactions:
+                lines.append("\n### Drug Interaction Warnings")
+                for interaction in severe_interactions:
+                    drug1 = interaction.get('drug1', 'Drug 1')
+                    drug2 = interaction.get('drug2', 'Drug 2')
+                    clinical_effect = interaction.get('clinical_effect', 'Unknown effect')
+                    recommendation = interaction.get('recommendation', 'Review with pharmacist')
+                    lines.append(f"- ⚠️ **{drug1} + {drug2}**: {clinical_effect}")
+                    lines.append(f"  Recommendation: {recommendation}")
+
+        return "\n".join(lines)
+
+    def _generate_monitoring_section(self, monitoring_protocol: Dict) -> str:
+        """Generate monitoring protocol section for MDT summary."""
+        if not monitoring_protocol:
+            return ""
+
+        lines = ["## Monitoring Protocol"]
+
+        regimen = monitoring_protocol.get('regimen', 'Unknown')
+        frequency = monitoring_protocol.get('frequency', 'As indicated')
+        lines.append(f"\n**Regimen**: {regimen}")
+        lines.append(f"**Frequency**: {frequency}")
+
+        # List tests to monitor
+        tests = monitoring_protocol.get('tests_to_monitor', [])
+        if tests:
+            lines.append("\n**Labs to Monitor**:")
+            for test in tests:
+                if isinstance(test, str):
+                    lines.append(f"- {test}")
+                else:
+                    test_name = test.get('loinc_name', test.get('name', 'Unknown'))
+                    test_freq = test.get('frequency', frequency)
+                    lines.append(f"- {test_name} ({test_freq})")
+
+        # List dose adjustments if present
+        dose_adjustments = monitoring_protocol.get('dose_adjustments', [])
+        if dose_adjustments:
+            lines.append("\n**Dose Adjustment Criteria**:")
+            for adjustment in dose_adjustments:
+                if isinstance(adjustment, str):
+                    lines.append(f"- {adjustment}")
+                else:
+                    parameter = adjustment.get('parameter', 'Unknown')
+                    threshold = adjustment.get('threshold', '')
+                    action = adjustment.get('action', 'Review dosing')
+                    lines.append(f"- {parameter} {threshold}: {action}")
+
+        return "\n".join(lines)
+
+    def _generate_trials_section(self, eligible_trials: List[Dict]) -> str:
+        """Generate clinical trials section for MDT summary."""
+        if not eligible_trials:
+            return ""
+
+        lines = ["## Eligible Clinical Trials"]
+
+        # Sort by match score (descending)
+        sorted_trials = sorted(
+            eligible_trials,
+            key=lambda t: t.get('match_score', t.get('eligibility_score', 0)),
+            reverse=True
+        )
+
+        # Show top 3 trials
+        for trial in sorted_trials[:3]:
+            nct_id = trial.get('nct_id', 'Unknown')
+            title = trial.get('title', trial.get('brief_title', 'Unknown trial'))
+            phase = trial.get('phase', 'Unknown')
+            score = trial.get('match_score', trial.get('eligibility_score', 0))
+            lines.append(f"\n- **{title}**")
+            lines.append(f"  NCT ID: {nct_id} | Phase: {phase} | Match Score: {score:.0f}/100")
+
+        if len(sorted_trials) > 3:
+            lines.append(f"\n{len(sorted_trials) - 3} additional trials available. Review full trial matching results for details.")
+
+        return "\n".join(lines)
 
     def format_for_patient(
         self, 

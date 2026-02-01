@@ -347,6 +347,11 @@ class DynamicWorkflowOrchestrator:
         Select agent execution path based on complexity
 
         Returns ordered list of agents to execute
+
+        NEW (2026-02): Integrated medical services agents:
+        - LabInterpretationAgent (LOINC)
+        - MedicationManagementAgent (RxNorm)
+        - MonitoringCoordinatorAgent (Lab-Drug integration)
         """
         base_agents = [
             "IngestionAgent",
@@ -357,12 +362,13 @@ class DynamicWorkflowOrchestrator:
         ]
 
         if complexity == WorkflowComplexity.SIMPLE:
-            # Fast path: core agents + biomarker + comorbidity + persistence
+            # Fast path: core agents + biomarker + comorbidity + medication safety + persistence
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
                 "ClassificationAgent",
                 "BiomarkerAgent",
+                "MedicationManagementAgent",  # NEW: DDI check
                 "ComorbidityAgent",
                 "NSCLCAgent",
                 "ConflictResolutionAgent",
@@ -371,12 +377,14 @@ class DynamicWorkflowOrchestrator:
             ]
 
         elif complexity == WorkflowComplexity.MODERATE:
-            # Standard path: include uncertainty quantification + persistence + SCLC + Survival
+            # Standard path: include lab interpretation + medication management + persistence
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
+                "LabInterpretationAgent",  # NEW: LOINC-based lab interpretation
                 "ClassificationAgent",
                 "BiomarkerAgent",
+                "MedicationManagementAgent",  # NEW: Comprehensive medication safety
                 "ComorbidityAgent",
                 "NSCLCAgent",
                 "SCLCAgent",
@@ -388,15 +396,18 @@ class DynamicWorkflowOrchestrator:
             ]
 
         elif complexity == WorkflowComplexity.COMPLEX:
-            # Extended path: add analytics agents + persistence
+            # Extended path: add monitoring coordination + analytics agents + persistence
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
+                "LabInterpretationAgent",  # NEW: Lab interpretation with toxicity grading
                 "ClassificationAgent",
                 "BiomarkerAgent",
+                "MedicationManagementAgent",  # NEW: DDI + contraindications
                 "ComorbidityAgent",
                 "NSCLCAgent",
                 "SCLCAgent",
+                "MonitoringCoordinatorAgent",  # NEW: Monitoring protocol generation
                 "SurvivalAnalyzer",
                 "ConflictResolutionAgent",
                 "UncertaintyQuantifier",
@@ -406,15 +417,18 @@ class DynamicWorkflowOrchestrator:
             ]
 
         else:  # CRITICAL
-            # Comprehensive path: ALL agents including counterfactual and persistence
+            # Comprehensive path: ALL agents including enhanced monitoring and persistence
             return [
                 "IngestionAgent",
                 "SemanticMappingAgent",
+                "LabInterpretationAgent",  # NEW: Critical value detection
                 "ClassificationAgent",
                 "BiomarkerAgent",
+                "MedicationManagementAgent",  # NEW: Full medication safety analysis
                 "ComorbidityAgent",
                 "NSCLCAgent",
                 "SCLCAgent",
+                "MonitoringCoordinatorAgent",  # NEW: Enhanced protocols + dose adjustments
                 "SurvivalAnalyzer",
                 "ConflictResolutionAgent",
                 "UncertaintyQuantifier",

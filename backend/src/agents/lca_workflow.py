@@ -53,29 +53,46 @@ class WorkflowState(TypedDict):
     """State passed between agents in the workflow."""
     # Input
     raw_patient_data: Dict[str, Any]
-    
+
     # After IngestionAgent
     patient_fact: Optional[PatientFact]
     ingestion_errors: List[str]
-    
+
     # After SemanticMappingAgent
     patient_with_codes: Optional[PatientFactWithCodes]
     mapping_confidence: float
-    
+
     # After ClassificationAgent
     classification: Optional[ClassificationResult]
-    
+
     # After ConflictResolutionAgent
     resolved_classification: Optional[ClassificationResult]
     conflict_reports: List[Dict[str, Any]]
-    
+
     # After PersistenceAgent
     write_receipt: Optional[WriteReceipt]
     inference_id: Optional[str]
-    
+
     # After ExplanationAgent
     mdt_summary: Optional[MDTSummary]
-    
+
+    # New: Lab/Medication/Monitoring/Trials Data
+    # From LabInterpretationAgent
+    lab_results: List[Dict[str, Any]]
+    lab_interpretations: List[Dict[str, Any]]
+
+    # From MedicationManagementAgent
+    medications: List[Dict[str, Any]]
+    drug_interactions: List[Dict[str, Any]]
+
+    # From MonitoringCoordinatorAgent
+    monitoring_protocol: Optional[Dict[str, Any]]
+    dose_adjustments: List[Dict[str, Any]]
+
+    # From ClinicalTrialsService
+    eligible_trials: List[Dict[str, Any]]
+    trial_match_scores: Dict[str, float]
+
     # Workflow metadata
     agent_chain: Annotated[List[str], operator.add]
     errors: Annotated[List[str], operator.add]

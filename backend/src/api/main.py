@@ -84,6 +84,12 @@ from src.api.routes import (
     graph_algorithms_router
 )
 
+# Import new medical services routers (2026-02)
+from src.api.routes.laboratory import router as laboratory_router
+from src.api.routes.medications import router as medications_router
+from src.api.routes.monitoring import router as monitoring_router
+from src.api.routes.clinical_trials import router as clinical_trials_router
+
 # Initialize FastAPI
 app = FastAPI(
     title="Lung Cancer Assistant API",
@@ -234,6 +240,12 @@ app.include_router(graph_router, prefix="/api")  # Graph visualization endpoints
 app.include_router(chat_graph_router, prefix="/api")  # Enhanced chat with graph integration
 app.include_router(ontology_router, prefix="/api/v1")  # Ontology lookup and validation
 app.include_router(graph_algorithms_router, prefix="/api/v1")  # Neo4j graph algorithms
+
+# NEW: Medical services routers (2026-02)
+app.include_router(laboratory_router, prefix="/api/v1/laboratory", tags=["laboratory"])  # LOINC lab interpretation
+app.include_router(medications_router, prefix="/api/v1/medications", tags=["medications"])  # RxNorm medications
+app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["monitoring"])  # Lab-drug monitoring
+app.include_router(clinical_trials_router, prefix="/api/v1/clinical-trials", tags=["trials"])  # Clinical trials
 
 # Global service instance
 lca_service: Optional[LungCancerAssistantService] = None

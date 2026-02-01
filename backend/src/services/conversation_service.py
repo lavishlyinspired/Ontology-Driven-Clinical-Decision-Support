@@ -512,6 +512,48 @@ class ConversationService:
                     "content": f"\n\n**Clinical Summary:**\n{summary_text}"
                 })
 
+            # Stream lab results if present
+            if hasattr(result, 'lab_results') and result.lab_results:
+                yield self._format_sse({
+                    "type": "lab_results",
+                    "content": {
+                        "results": result.lab_results,
+                        "interpretations": getattr(result, 'lab_interpretations', [])
+                    }
+                })
+
+            # Stream drug interactions if present
+            if hasattr(result, 'drug_interactions') and result.drug_interactions:
+                # Check for severe interactions
+                severe_interactions = [
+                    di for di in result.drug_interactions
+                    if di.get('severity', '').upper() == 'SEVERE'
+                ]
+                yield self._format_sse({
+                    "type": "drug_interactions",
+                    "content": {
+                        "interactions": result.drug_interactions,
+                        "severe_count": len(severe_interactions)
+                    }
+                })
+
+            # Stream monitoring protocol if present
+            if hasattr(result, 'monitoring_protocol') and result.monitoring_protocol:
+                yield self._format_sse({
+                    "type": "monitoring_protocol",
+                    "content": result.monitoring_protocol
+                })
+
+            # Stream eligible clinical trials if present
+            if hasattr(result, 'eligible_trials') and result.eligible_trials:
+                yield self._format_sse({
+                    "type": "eligible_trials",
+                    "content": {
+                        "trials": result.eligible_trials,
+                        "match_scores": getattr(result, 'trial_match_scores', {})
+                    }
+                })
+
             # Step 5: Record decision in Neo4j and send graph visualization data
             if self.lca_service.graph_db and self.lca_service.graph_db.driver:
                 try:

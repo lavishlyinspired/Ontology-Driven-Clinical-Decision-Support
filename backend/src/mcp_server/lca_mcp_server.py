@@ -1732,6 +1732,166 @@ class LCAMCPServer:
             }
         ))
 
+        # ============================================
+        # CATEGORY 17: MEDICAL SERVICES INTEGRATION (9 tools - NEW 2026-02)
+        # ============================================
+
+        # LOINC Service Tools (3 tools)
+        tools.append(Tool(
+            name="interpret_lab_result",
+            description="Interpret a laboratory result with clinical context using LOINC codes. Returns interpretation, severity (normal/grade1-4), and clinical recommendations.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "loinc_code": {"type": "string", "description": "LOINC code (e.g., '718-7' for Hemoglobin)"},
+                    "value": {"type": "number", "description": "Lab value"},
+                    "units": {"type": "string", "description": "Units (e.g., 'g/dL', 'U/L')"},
+                    "sex": {"type": "string", "enum": ["M", "F", "unknown"], "default": "unknown", "description": "Patient sex for sex-specific reference ranges"},
+                    "age": {"type": "integer", "description": "Patient age (optional)"},
+                    "is_smoker": {"type": "boolean", "description": "Smoker status for tumor markers (optional)"},
+                    "current_treatment": {"type": "string", "description": "Current treatment for treatment-specific ranges (optional)"}
+                },
+                "required": ["loinc_code", "value", "units"]
+            }
+        ))
+
+        tools.append(Tool(
+            name="get_lung_cancer_lab_panel",
+            description="Get a predefined lab panel for lung cancer workflows. Returns list of LOINC codes with frequency and rationale.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "panel_type": {
+                        "type": "string",
+                        "enum": ["baseline_staging", "molecular_testing", "chemotherapy_monitoring", "immunotherapy_monitoring", "tki_monitoring", "sclc_specific", "surgical_clearance"],
+                        "description": "Type of lab panel to retrieve"
+                    }
+                },
+                "required": ["panel_type"]
+            }
+        ))
+
+        tools.append(Tool(
+            name="search_loinc_codes",
+            description="Search LOINC codes by query string and category. Returns matching LOINC codes with descriptions.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query (e.g., 'hemoglobin', 'liver function')"},
+                    "category": {
+                        "type": "string",
+                        "enum": ["all", "tumor_marker", "hematology", "chemistry", "molecular_biomarker", "pulmonary_function"],
+                        "default": "all",
+                        "description": "Filter by category"
+                    },
+                    "max_results": {"type": "integer", "default": 20, "description": "Maximum results to return"}
+                },
+                "required": ["query"]
+            }
+        ))
+
+        # RxNorm Service Tools (3 tools)
+        tools.append(Tool(
+            name="search_lung_cancer_drug",
+            description="Search lung cancer drug formulary by name using RxNorm. Returns drug details including RxCUI, class, dosing, and monitoring requirements.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Drug name to search (e.g., 'osimertinib', 'pembrolizumab')"},
+                    "drug_class": {
+                        "type": "string",
+                        "enum": ["all", "EGFR_TKI", "ALK_TKI", "immunotherapy", "chemotherapy", "targeted_therapy"],
+                        "default": "all",
+                        "description": "Filter by drug class"
+                    }
+                },
+                "required": ["query"]
+            }
+        ))
+
+        tools.append(Tool(
+            name="check_drug_drug_interactions",
+            description="Check for drug-drug interactions across a medication list. Returns interactions with severity (SEVERE/MODERATE/MILD), mechanism, and recommendations.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "drug_list": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of drug names to check for interactions"
+                    },
+                    "include_mild": {"type": "boolean", "default": False, "description": "Include MILD severity interactions"}
+                },
+                "required": ["drug_list"]
+            }
+        ))
+
+        tools.append(Tool(
+            name="get_therapeutic_alternatives",
+            description="Get therapeutic alternatives within the same drug class. Useful for managing adverse events or drug interactions.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "drug_name": {"type": "string", "description": "Drug name to find alternatives for"},
+                    "reason": {
+                        "type": "string",
+                        "enum": ["adverse_event", "drug_interaction", "efficacy", "cost", "other"],
+                        "default": "other",
+                        "description": "Reason for seeking alternative"
+                    }
+                },
+                "required": ["drug_name"]
+            }
+        ))
+
+        # Lab-Drug Integration Service Tools (3 tools)
+        tools.append(Tool(
+            name="get_monitoring_protocol",
+            description="Get lab monitoring protocol for a treatment regimen. Returns baseline labs, monitoring frequency, and alert thresholds.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "regimen": {"type": "string", "description": "Treatment regimen (e.g., 'Osimertinib monotherapy', 'Carboplatin + Pemetrexed + Pembrolizumab')"}
+                },
+                "required": ["regimen"]
+            }
+        ))
+
+        tools.append(Tool(
+            name="assess_dose_adjustment_for_labs",
+            description="Assess if dose adjustment is needed based on lab results. Returns adjustment recommendation with rationale and evidence level.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "drug_name": {"type": "string", "description": "Drug name (e.g., 'Carboplatin', 'Pemetrexed')"},
+                    "lab_results": {
+                        "type": "object",
+                        "description": "Lab results as LOINC code -> {value, units} map",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                                "value": {"type": "number"},
+                                "units": {"type": "string"}
+                            }
+                        }
+                    }
+                },
+                "required": ["drug_name", "lab_results"]
+            }
+        ))
+
+        tools.append(Tool(
+            name="predict_lab_effects",
+            description="Predict expected lab changes for a given drug. Returns lab effects with frequency (very_common/common/uncommon) and severity.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "drug_name": {"type": "string", "description": "Drug name to predict effects for"}
+                },
+                "required": ["drug_name"]
+            }
+        ))
+
         return tools
 
     # ===========================================
@@ -1939,6 +2099,15 @@ class LCAMCPServer:
             "extract_snomed_hierarchy": self._handle_extract_snomed_hierarchy,
             "snomed_subsumption_check": self._handle_snomed_subsumption_check,
             "load_snomed_to_neo4j": self._handle_load_snomed_to_neo4j,
+
+            # NEW Medical Services Integration (2026-02)
+            "interpret_lab_result": self._handle_interpret_lab_result,
+            "get_lung_cancer_lab_panel": self._handle_get_lung_cancer_lab_panel,
+            "search_loinc_codes": self._handle_search_loinc_codes,
+            "search_lung_cancer_drug": self._handle_search_lung_cancer_drug,
+            "check_drug_drug_interactions": self._handle_check_drug_drug_interactions,
+            "assess_dose_adjustment_for_labs": self._handle_assess_dose_adjustment_for_labs,
+            "predict_lab_effects": self._handle_predict_lab_effects,
         }
 
         return handlers.get(name)
@@ -4982,7 +5151,7 @@ class LCAMCPServer:
 
     def _register_resources(self):
         """Register MCP resources for Claude Desktop."""
-        from mcp.server.models import Resource
+        from mcp.types import Resource
         
         @self.server.list_resources()
         async def list_resources():
@@ -5077,6 +5246,226 @@ class LCAMCPServer:
                 "constraints": ["Patient.id UNIQUE", "Disease.code UNIQUE"]
             }
         return {"error": f"Unknown resource: {uri}"}
+
+    # ===========================================
+    # TOOL HANDLERS - MEDICAL SERVICES INTEGRATION (NEW 2026-02)
+    # ===========================================
+
+    async def _handle_interpret_lab_result(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Interpret a lab result with clinical context using LOINC"""
+        from src.services.loinc_service import get_loinc_service
+
+        loinc_code = args.get("loinc_code")
+        value = args.get("value")
+        units = args.get("units")
+        sex = args.get("sex", "unknown")
+
+        try:
+            service = get_loinc_service()
+
+            patient_context = {
+                "sex": sex,
+                "age": args.get("age"),
+                "is_smoker": args.get("is_smoker"),
+                "treatment": args.get("current_treatment")
+            }
+
+            result = service.interpret_lab_result(
+                loinc_code=loinc_code,
+                value=value,
+                unit=units,
+                patient_context=patient_context
+            )
+
+            return {
+                "status": "success",
+                "loinc_code": result.loinc_code,
+                "value": result.value,
+                "unit": result.unit,
+                "interpretation": result.interpretation,
+                "reference_range": result.reference_range,
+                "clinical_significance": result.clinical_significance,
+                "recommendations": result.recommendations,
+                "context": result.context
+            }
+
+        except Exception as e:
+            logger.error(f"Lab interpretation error: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    async def _handle_get_lung_cancer_lab_panel(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Get a predefined lab panel for lung cancer workflows"""
+        from src.services.loinc_service import get_loinc_service
+
+        panel_type = args.get("panel_type")
+
+        try:
+            service = get_loinc_service()
+            result = service.get_lung_cancer_panel(panel_type)
+
+            return {
+                "status": "success",
+                "panel_type": panel_type,
+                "panel_name": result.get("panel_name", ""),
+                "loinc_codes": result.get("loinc_codes", []),
+                "frequency": result.get("frequency", ""),
+                "rationale": result.get("rationale", "")
+            }
+
+        except Exception as e:
+            logger.error(f"Lab panel error: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    async def _handle_search_loinc_codes(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Search LOINC codes by query string"""
+        from src.services.loinc_service import get_loinc_service
+
+        query = args.get("query")
+        category = args.get("category", "all")
+        max_results = args.get("max_results", 20)
+
+        try:
+            service = get_loinc_service()
+            results = service.search_loinc(
+                query=query,
+                category=category if category != "all" else None,
+                limit=max_results
+            )
+
+            return {
+                "status": "success",
+                "query": query,
+                "category": category,
+                "count": len(results),
+                "results": results
+            }
+
+        except Exception as e:
+            logger.error(f"LOINC search error: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    async def _handle_search_lung_cancer_drug(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Search lung cancer drug formulary by name"""
+        from src.services.rxnorm_service import get_rxnorm_service
+
+        query = args.get("query")
+        drug_class = args.get("drug_class", "all")
+
+        try:
+            service = get_rxnorm_service()
+            results = service.search_drug(
+                query=query,
+                drug_class=drug_class if drug_class != "all" else None
+            )
+
+            return {
+                "status": "success",
+                "query": query,
+                "results": results
+            }
+
+        except Exception as e:
+            logger.error(f"Drug search error: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    async def _handle_check_drug_drug_interactions(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Check for drug-drug interactions across medication list"""
+        from src.services.rxnorm_service import get_rxnorm_service
+
+        drug_list = args.get("drug_list", [])
+        include_mild = args.get("include_mild", False)
+
+        try:
+            service = get_rxnorm_service()
+            results = service.check_drug_interactions(drug_list)
+
+            interactions = results.get("interactions", [])
+
+            # Filter out MILD if not requested
+            if not include_mild:
+                interactions = [i for i in interactions if i.get("severity") != "MILD"]
+
+            return {
+                "status": "success",
+                "drug_count": len(drug_list),
+                "interaction_count": len(interactions),
+                "interactions": interactions
+            }
+
+        except Exception as e:
+            logger.error(f"Drug interaction check error: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    async def _handle_assess_dose_adjustment_for_labs(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Assess if dose adjustment needed based on lab values"""
+        from src.services.lab_drug_service import get_lab_drug_service
+
+        drug_name = args.get("drug_name")
+        lab_results = args.get("lab_results", {})
+
+        try:
+            service = get_lab_drug_service()
+            result = service.assess_dose_for_labs(
+                drug_name=drug_name,
+                lab_results=lab_results
+            )
+
+            return {
+                "status": "success",
+                "drug_name": drug_name,
+                "adjustment_needed": result.get("adjustment_needed", False),
+                "current_dose": result.get("current_dose", ""),
+                "recommended_dose": result.get("recommended_dose", ""),
+                "rationale": result.get("rationale", ""),
+                "severity": result.get("severity", "routine"),
+                "evidence_level": result.get("evidence_level", "Grade C"),
+                "trigger_loinc": result.get("trigger_loinc", "")
+            }
+
+        except Exception as e:
+            logger.error(f"Dose assessment error: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    async def _handle_predict_lab_effects(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Predict expected lab changes for a given drug"""
+        from src.services.lab_drug_service import get_lab_drug_service
+
+        drug_name = args.get("drug_name")
+
+        try:
+            service = get_lab_drug_service()
+            result = service.check_drug_lab_effects(drug_name)
+
+            return {
+                "status": "success",
+                "drug_name": drug_name,
+                "lab_effects": result.get("lab_effects", [])
+            }
+
+        except Exception as e:
+            logger.error(f"Lab effects prediction error: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
 
     # ===========================================
     # SERVER RUN

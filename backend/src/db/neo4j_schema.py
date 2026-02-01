@@ -31,22 +31,100 @@ class LUCADAGraphDB:
     """
 
     SCHEMA_QUERIES = [
-        # Constraints
+        # Constraints - Core
         "CREATE CONSTRAINT patient_id IF NOT EXISTS FOR (p:Patient) REQUIRE p.patient_id IS UNIQUE",
         "CREATE CONSTRAINT rule_id IF NOT EXISTS FOR (r:GuidelineRule) REQUIRE r.rule_id IS UNIQUE",
         "CREATE CONSTRAINT outcome_id IF NOT EXISTS FOR (o:Outcome) REQUIRE o.outcome_id IS UNIQUE",
         "CREATE CONSTRAINT treatment_plan_id IF NOT EXISTS FOR (t:TreatmentPlan) REQUIRE t.plan_id IS UNIQUE",
 
-        # Indexes
+        # Constraints - Medical Services (Migration 001)
+        "CREATE CONSTRAINT lab_result_id IF NOT EXISTS FOR (l:LabResult) REQUIRE l.id IS UNIQUE",
+        "CREATE CONSTRAINT medication_id IF NOT EXISTS FOR (m:Medication) REQUIRE m.id IS UNIQUE",
+        "CREATE CONSTRAINT interaction_id IF NOT EXISTS FOR (i:DrugInteraction) REQUIRE i.id IS UNIQUE",
+        "CREATE CONSTRAINT protocol_id IF NOT EXISTS FOR (p:MonitoringProtocol) REQUIRE p.id IS UNIQUE",
+        "CREATE CONSTRAINT trial_nct_unique IF NOT EXISTS FOR (t:ClinicalTrial) REQUIRE t.nct_id IS UNIQUE",
+
+        # Indexes - Core
         "CREATE INDEX patient_stage IF NOT EXISTS FOR (p:Patient) ON (p.tnm_stage)",
         "CREATE INDEX histology_type IF NOT EXISTS FOR (h:Histology) ON (h.type)",
         "CREATE INDEX outcome_status IF NOT EXISTS FOR (o:Outcome) ON (o.status)",
         "CREATE INDEX treatment_type IF NOT EXISTS FOR (t:TreatmentPlan) ON (t.type)",
 
+        # Indexes - Lab Results (Migration 001)
+        "CREATE INDEX lab_result_loinc IF NOT EXISTS FOR (l:LabResult) ON (l.loinc_code)",
+        "CREATE INDEX lab_result_date IF NOT EXISTS FOR (l:LabResult) ON (l.test_date)",
+        "CREATE INDEX lab_result_severity IF NOT EXISTS FOR (l:LabResult) ON (l.severity)",
+
+        # Indexes - Medications (Migration 001)
+        "CREATE INDEX medication_rxcui IF NOT EXISTS FOR (m:Medication) ON (m.rxcui)",
+        "CREATE INDEX medication_class IF NOT EXISTS FOR (m:Medication) ON (m.drug_class)",
+        "CREATE INDEX medication_start IF NOT EXISTS FOR (m:Medication) ON (m.start_date)",
+
+        # Indexes - Clinical Trials (Migration 001)
+        "CREATE INDEX trial_nct IF NOT EXISTS FOR (t:ClinicalTrial) ON (t.nct_id)",
+        "CREATE INDEX trial_phase IF NOT EXISTS FOR (t:ClinicalTrial) ON (t.phase)",
+
         # Full-text search
         """CREATE FULLTEXT INDEX patient_search IF NOT EXISTS
            FOR (p:Patient) ON EACH [p.name, p.notes]""",
     ]
+
+    # Node type documentation (for reference)
+    NODE_TYPES = {
+        # Core nodes
+        "Patient": "Patient demographics and clinical data",
+        "ClinicalFinding": "Clinical diagnosis and findings",
+        "Histology": "Tumor histology type",
+        "TreatmentPlan": "Recommended or received treatment",
+        "Outcome": "Treatment outcome and response",
+        "GuidelineRule": "NICE guideline rules",
+        "PerformanceStatus": "ECOG performance status",
+        "Biomarker": "Molecular biomarkers (EGFR, ALK, etc.)",
+
+        # Medical services nodes (Migration 001)
+        "LabResult": "Laboratory test results with LOINC codes",
+        "Medication": "Medications with RxNorm codes",
+        "DrugInteraction": "Drug-drug interactions",
+        "MonitoringProtocol": "Lab monitoring protocols for treatments",
+        "ClinicalTrial": "Clinical trials from ClinicalTrials.gov"
+    }
+
+    # Relationship type documentation (for reference)
+    RELATIONSHIP_TYPES = {
+        # Core relationships
+        "HAS_CLINICAL_FINDING": "Patient has clinical finding",
+        "HAS_HISTOLOGY": "Finding has histology type",
+        "HAS_PERFORMANCE_STATUS": "Patient has performance status",
+        "HAS_TREATMENT_PLAN": "Patient has treatment plan",
+        "RECOMMENDED_TREATMENT": "Patient recommended for treatment",
+        "RECEIVED_TREATMENT": "Patient received treatment",
+        "HAS_OUTCOME": "Treatment has outcome",
+        "RECOMMENDS": "Guideline recommends treatment",
+
+        # Lab result relationships (Migration 001)
+        "HAS_LAB_RESULT": "Patient has lab result",
+        "INDICATES": "Lab result indicates clinical finding",
+        "TRIGGERED_BY": "Lab abnormality triggered by medication",
+        "PROMPTED": "Lab result prompted treatment decision",
+
+        # Medication relationships (Migration 001)
+        "PRESCRIBED": "Patient prescribed medication",
+        "TARGETS": "Medication targets biomarker",
+        "INTERACTS_WITH": "Medication interacts with another medication",
+        "INVOLVES": "Drug interaction involves medications",
+
+        # Monitoring relationships (Migration 001)
+        "FOLLOWS": "Patient follows monitoring protocol",
+        "INCLUDES": "Protocol includes lab tests",
+        "MONITORS": "Protocol monitors medication",
+        "BASED_ON": "Protocol based on guideline",
+
+        # Clinical trial relationships (Migration 001)
+        "ELIGIBLE_FOR": "Patient eligible for trial",
+        "ENROLLED_IN": "Patient enrolled in trial",
+        "INVESTIGATES": "Trial investigates biomarker",
+        "USES_INTERVENTION": "Trial uses intervention/medication"
+    }
 
     def __init__(self, config: Neo4jConfig = None):
         """Initialize Neo4j connection"""

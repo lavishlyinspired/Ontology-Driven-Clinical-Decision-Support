@@ -182,12 +182,23 @@ class BiomarkerAgent:
                 "Osimertinib is FDA-approved for T790M-positive NSCLC with superior CNS penetration."
             )
         elif biomarkers.egfr_mutation_type in ["Ex19del", "L858R"]:
-            # Common sensitizing mutations - first-line osimertinib
-            treatment = "Osimertinib (1st-line)"
-            rationale = (
-                f"EGFR {biomarkers.egfr_mutation_type} sensitizing mutation. "
-                "Osimertinib first-line per FLAURA trial (median PFS 18.9 months vs 10.2 for 1st-gen TKIs)."
-            )
+            # Common sensitizing mutations - treatment approach depends on stage
+            tnm_stage = self._get_patient_attr(patient, 'tnm_stage', 'IV')
+            
+            if tnm_stage == "IIIA":
+                treatment = "Osimertinib (consider multimodal approach)"
+                rationale = (
+                    f"EGFR {biomarkers.egfr_mutation_type} sensitizing mutation in stage IIIA disease. "
+                    "Consider: 1) Neoadjuvant osimertinib if resectable, 2) Osimertinib first-line if unresectable, "
+                    "or 3) Concurrent chemoradiation followed by adjuvant osimertinib. "
+                    "Multidisciplinary team evaluation recommended for optimal sequencing."
+                )
+            else:
+                treatment = "Osimertinib (1st-line)"
+                rationale = (
+                    f"EGFR {biomarkers.egfr_mutation_type} sensitizing mutation. "
+                    "Osimertinib first-line per FLAURA trial (median PFS 18.9 months vs 10.2 for 1st-gen TKIs)."
+                )
         else:
             # Other EGFR mutations
             treatment = "EGFR TKI (mutation-specific selection)"
@@ -214,19 +225,20 @@ class BiomarkerAgent:
             treatment=treatment,
             confidence=0.95,  # High confidence for actionable mutation
             evidence_level="Grade A",
-            treatment_intent="Curative" if tnm_stage in ["I", "II", "III", "IIIA"] else "Palliative",
+            treatment_intent="Curative" if tnm_stage in ["I", "II", "III", "IIIA", "IIIB"] else "Palliative",
             rationale=rationale,
-            guideline_reference="NCCN NSCLC 2025, ASCO EGFR Guidelines",
+            guideline_reference="NCCN NSCLC 2025.1, ASCO EGFR Guidelines",
             contraindications=contraindications,
             risk_score=risk_score,
             supporting_data={
                 "biomarker": "EGFR",
                 "mutation_type": biomarkers.egfr_mutation_type,
-                "median_pfs": "18.9 months (FLAURA)",
-                "response_rate": "80%",
-                "cns_penetration": "Excellent"
+                "median_pfs": "18.9 months (FLAURA trial)" if tnm_stage != "IIIA" else "Varies by approach",
+                "response_rate": "80%" if tnm_stage != "IIIA" else "70-95% (depends on resectability)",
+                "cns_penetration": "Excellent (crosses blood-brain barrier)",
+                "stage_specific_note": "Consider multimodal approach with MDT evaluation" if tnm_stage == "IIIA" else ""
             },
-            expected_benefit="High response rate (70-80%), prolonged PFS (18+ months)"
+            expected_benefit="High response rate (70-80%), prolonged PFS (18+ months)" if tnm_stage != "IIIA" else "High response rate, consider resection + systemic therapy sequencing"
         )
 
     def _alk_pathway(

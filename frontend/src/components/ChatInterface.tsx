@@ -7,6 +7,10 @@ import remarkGfm from 'remark-gfm'
 import type { GraphData, GraphNode } from '@/lib/api'
 import { McpAppHost } from './McpAppHost'
 import { GroundedCitations } from './GroundedCitations'
+import LabResultsPanel from './LabResultsPanel'
+import MedicationListPanel from './MedicationListPanel'
+import MonitoringProtocolPanel from './MonitoringProtocolPanel'
+import ClinicalTrialsPanel from './ClinicalTrialsPanel'
 
 interface ChatInterfaceProps {
   onGraphDataChange?: (data: GraphData) => void
@@ -296,6 +300,15 @@ Try describing a patient to get started!`,
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [logsExpanded, setLogsExpanded] = useState(false)
+
+  // New state for lab/medication/monitoring/trials
+  const [labResults, setLabResults] = useState<any[]>([])
+  const [labInterpretations, setLabInterpretations] = useState<any[]>([])
+  const [medications, setMedications] = useState<any[]>([])
+  const [drugInteractions, setDrugInteractions] = useState<any[]>([])
+  const [monitoringProtocol, setMonitoringProtocol] = useState<any>(null)
+  const [eligibleTrials, setEligibleTrials] = useState<any[]>([])
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const workflowStepsRef = useRef<WorkflowStep[]>([])
@@ -460,6 +473,36 @@ Try describing a patient to get started!`,
                 assistantContent += `\n## Treatment Plan\n\n${data.content}\n\n`
               } else if (data.type === 'suggestions') {
                 setSuggestions(data.content)
+              } else if (data.type === 'lab_results') {
+                // Handle lab results from LabInterpretationAgent
+                if (data.content.results) {
+                  setLabResults(data.content.results)
+                }
+                if (data.content.interpretations) {
+                  setLabInterpretations(data.content.interpretations)
+                }
+              } else if (data.type === 'drug_interactions') {
+                // Handle drug interactions from MedicationManagementAgent
+                if (data.content.interactions) {
+                  setDrugInteractions(data.content.interactions)
+                }
+                // Show alert for severe interactions
+                if (data.content.severe_count > 0) {
+                  setWorkflowSteps(prev => [...prev, {
+                    id: crypto.randomUUID(),
+                    content: `⚠️ ${data.content.severe_count} severe drug interaction(s) detected!`,
+                    status: 'error' as const,
+                    timestamp: new Date().toLocaleTimeString()
+                  }])
+                }
+              } else if (data.type === 'monitoring_protocol') {
+                // Handle monitoring protocol from MonitoringCoordinatorAgent
+                setMonitoringProtocol(data.content)
+              } else if (data.type === 'eligible_trials') {
+                // Handle clinical trials from ClinicalTrialsService
+                if (data.content.trials) {
+                  setEligibleTrials(data.content.trials)
+                }
               } else if (data.type === 'error') {
                 assistantContent += `\n\n**Error:** ${data.content}\n`
                 setWorkflowSteps(prev => [...prev, {
@@ -759,23 +802,23 @@ Try describing a patient to get started!`,
                         components={{
                           table: ({ node, ...props }) => (
                             <div className="overflow-x-auto my-4">
-                              <table className="min-w-full divide-y divide-gray-300 border border-gray-300" {...props} />
+                              <table className="min-w-full divide-y divide-zinc-600 border border-zinc-600" {...props} />
                             </div>
                           ),
                           thead: ({ node, ...props }) => (
-                            <thead className="bg-gray-50" {...props} />
+                            <thead className="bg-zinc-700" {...props} />
                           ),
                           tbody: ({ node, ...props }) => (
-                            <tbody className="divide-y divide-gray-200 bg-white" {...props} />
+                            <tbody className="divide-y divide-zinc-600 bg-zinc-800" {...props} />
                           ),
                           tr: ({ node, ...props }) => (
                             <tr {...props} />
                           ),
                           th: ({ node, ...props }) => (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border border-gray-300" {...props} />
+                            <th className="px-4 py-2 text-left text-xs font-medium text-zinc-200 uppercase tracking-wider border border-zinc-600" {...props} />
                           ),
                           td: ({ node, ...props }) => (
-                            <td className="px-4 py-2 text-sm text-gray-900 border border-gray-300" {...props} />
+                            <td className="px-4 py-2 text-sm text-zinc-100 border border-zinc-600" {...props} />
                           ),
                         }}
                       >
@@ -909,6 +952,48 @@ Try describing a patient to get started!`,
         
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Clinical Data Panels */}
+      {(labResults.length > 0 || medications.length > 0 || monitoringProtocol || eligibleTrials.length > 0) && (
+        <div className="border-t border-zinc-700 bg-zinc-900 p-6 max-h-96 overflow-y-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Lab Results Panel */}
+            {labResults.length > 0 && (
+              <LabResultsPanel
+                patientId={currentPatientData?.patient_id}
+                labResults={labResults}
+                labInterpretations={labInterpretations}
+              />
+            )}
+
+            {/* Medications Panel */}
+            {medications.length > 0 && (
+              <MedicationListPanel
+                patientId={currentPatientData?.patient_id}
+                medications={medications}
+                interactions={drugInteractions}
+              />
+            )}
+
+            {/* Monitoring Protocol Panel */}
+            {monitoringProtocol && (
+              <MonitoringProtocolPanel
+                patientId={currentPatientData?.patient_id}
+                protocol={monitoringProtocol}
+                labResults={labResults}
+              />
+            )}
+
+            {/* Clinical Trials Panel */}
+            {eligibleTrials.length > 0 && (
+              <ClinicalTrialsPanel
+                patientId={currentPatientData?.patient_id}
+                trials={eligibleTrials}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-zinc-700 bg-zinc-800 p-4 shadow-sm">

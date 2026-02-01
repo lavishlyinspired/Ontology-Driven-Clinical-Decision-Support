@@ -657,12 +657,12 @@ class Neo4jWriteTools:
         """
         Save treatment recommendation to Neo4j.
         WRITE: Creates TreatmentPlan and links to Inference and Patient.
-        
+
         Args:
             patient_id: Patient identifier
             inference_id: Inference identifier
             recommendation: Dict with 'treatment', 'rank', 'evidence_level', etc.
-            
+
         Returns:
             Recommendation node ID
         """
@@ -680,7 +680,7 @@ class Neo4jWriteTools:
         query = """
         MATCH (p:Patient {patient_id: $patient_id})
         MATCH (i:Inference {inference_id: $inference_id})
-        
+
         CREATE (rec:Recommendation {
             recommendation_id: randomUUID(),
             treatment: $treatment,
@@ -690,13 +690,13 @@ class Neo4jWriteTools:
             rationale: $rationale,
             timestamp: datetime()
         })
-        
+
         CREATE (i)-[:HAS_RECOMMENDATION]->(rec)
         CREATE (rec)-[:FOR_PATIENT]->(p)
-        
+
         RETURN rec.recommendation_id as rec_id
         """
-        
+
         try:
             with self.driver.session(database=self.database) as session:
                 result = session.run(
@@ -715,6 +715,305 @@ class Neo4jWriteTools:
                 return rec_id
         except Exception as e:
             logger.error(f"Failed to save recommendation: {e}")
+            return ""
+
+    def save_lab_result(self, patient_id: str, loinc_code: str, test_name: str,
+                       value: float, unit: str, reference_range: str = None,
+                       interpretation: str = None, severity: str = None,
+                       test_date: str = None, inference_id: str = None) -> str:
+        """
+        Save lab result to Neo4j.
+        WRITE: Creates LabResult node and links to Patient.
+
+        Args:
+            patient_id: Patient identifier
+            loinc_code: LOINC code for the test
+            test_name: Name of the test
+            value: Test result value
+            unit: Unit of measurement
+            reference_range: Normal reference range
+            interpretation: Clinical interpretation (normal/high/low/critical)
+            severity: CTCAE grade (normal/grade1/grade2/grade3/grade4)
+            test_date: Date test was performed
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            Lab result node ID
+        """
+        if not self._available:
+            logger.warning("Neo4j not available - skipping lab result save")
+            return ""
+
+        query = """
+        MATCH (p:Patient {patient_id: $patient_id})
+
+        CREATE (lab:LabResult {
+            id: randomUUID(),
+            loinc_code: $loinc_code,
+            loinc_name: $test_name,
+            value: $value,
+            units: $unit,
+            reference_range: $reference_range,
+            interpretation: $interpretation,
+            severity: $severity,
+            test_date: $test_date,
+            created_at: datetime()
+        })
+
+        CREATE (p)-[:HAS_LAB_RESULT {test_date: $test_date}]->(lab)
+        """ + ("""
+        WITH lab
+        MATCH (i:Inference {inference_id: $inference_id})
+        CREATE (i)-[:GENERATED_LAB_INTERPRETATION]->(lab)
+        """ if inference_id else "") + """
+        RETURN lab.id as lab_id
+        """
+
+        try:
+            params = {
+                'patient_id': patient_id,
+                'loinc_code': loinc_code,
+                'test_name': test_name,
+                'value': value,
+                'unit': unit,
+                'reference_range': reference_range,
+                'interpretation': interpretation or 'unknown',
+                'severity': severity or 'unknown',
+                'test_date': test_date or datetime.now().isoformat()
+            }
+            if inference_id:
+                params['inference_id'] = inference_id
+
+            with self.driver.session(database=self.database) as session:
+                result = session.run(query, **params)
+                record = result.single()
+                lab_id = record["lab_id"] if record else ""
+                logger.info(f"✓ Saved lab result: {test_name} ({loinc_code})")
+                return lab_id
+        except Exception as e:
+            logger.error(f"Failed to save lab result: {e}")
+            return ""
+
+    def save_medication(self, patient_id: str, rxcui: str = None, drug_name: str = None,
+                       dose: str = None, frequency: str = None, route: str = None,
+                       start_date: str = None, end_date: str = None,
+                       status: str = 'active', inference_id: str = None) -> str:
+        """
+        Save medication to Neo4j.
+        WRITE: Creates Medication node and links to Patient.
+
+        Args:
+            patient_id: Patient identifier
+            rxcui: RxNorm CUI identifier
+            drug_name: Name of the medication
+            dose: Dosage information
+            frequency: Frequency of administration
+            route: Route of administration
+            start_date: Start date
+            end_date: End date (None for ongoing)
+            status: Medication status (active/inactive/discontinued)
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            Medication node ID
+        """
+        if not self._available:
+            logger.warning("Neo4j not available - skipping medication save")
+            return ""
+
+        query = """
+        MATCH (p:Patient {patient_id: $patient_id})
+
+        CREATE (med:Medication {
+            id: randomUUID(),
+            rxcui: $rxcui,
+            drug_name: $drug_name,
+            dose: $dose,
+            route: $route,
+            frequency: $frequency,
+            start_date: $start_date,
+            end_date: $end_date,
+            status: $status,
+            created_at: datetime()
+        })
+
+        CREATE (p)-[:PRESCRIBED {start_date: $start_date, status: $status}]->(med)
+        """ + ("""
+        WITH med
+        MATCH (i:Inference {inference_id: $inference_id})
+        CREATE (i)-[:RECOMMENDED_MEDICATION]->(med)
+        """ if inference_id else "") + """
+        RETURN med.id as med_id
+        """
+
+        try:
+            params = {
+                'patient_id': patient_id,
+                'rxcui': rxcui,
+                'drug_name': drug_name or 'Unknown',
+                'dose': dose,
+                'route': route,
+                'frequency': frequency,
+                'start_date': start_date or datetime.now().isoformat(),
+                'end_date': end_date,
+                'status': status
+            }
+            if inference_id:
+                params['inference_id'] = inference_id
+
+            with self.driver.session(database=self.database) as session:
+                result = session.run(query, **params)
+                record = result.single()
+                med_id = record["med_id"] if record else ""
+                logger.info(f"✓ Saved medication: {drug_name}")
+                return med_id
+        except Exception as e:
+            logger.error(f"Failed to save medication: {e}")
+            return ""
+
+    def save_monitoring_protocol(self, patient_id: str, regimen: str,
+                                 frequency: str = None, tests_to_monitor: List[str] = None,
+                                 schedule: List[Dict] = None, dose_adjustments: List[Dict] = None,
+                                 created_at: str = None, inference_id: str = None) -> str:
+        """
+        Save monitoring protocol to Neo4j.
+        WRITE: Creates MonitoringProtocol node and links to Patient.
+
+        Args:
+            patient_id: Patient identifier
+            regimen: Treatment regimen name
+            frequency: Monitoring frequency (weekly/q3weeks/monthly)
+            tests_to_monitor: List of tests to monitor (LOINC codes)
+            schedule: Monitoring schedule details
+            dose_adjustments: Dose adjustment recommendations
+            created_at: Creation timestamp
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            Monitoring protocol node ID
+        """
+        if not self._available:
+            logger.warning("Neo4j not available - skipping monitoring protocol save")
+            return ""
+
+        query = """
+        MATCH (p:Patient {patient_id: $patient_id})
+
+        CREATE (protocol:MonitoringProtocol {
+            id: randomUUID(),
+            protocol_name: $regimen + '_monitoring',
+            regimen: $regimen,
+            frequency: $frequency,
+            tests_to_monitor: $tests_to_monitor,
+            schedule: $schedule,
+            dose_adjustments: $dose_adjustments,
+            created_date: $created_at,
+            created_at: datetime()
+        })
+
+        CREATE (p)-[:FOLLOWS]->(protocol)
+        """ + ("""
+        WITH protocol
+        MATCH (i:Inference {inference_id: $inference_id})
+        CREATE (i)-[:GENERATED_PROTOCOL]->(protocol)
+        """ if inference_id else "") + """
+        RETURN protocol.id as protocol_id
+        """
+
+        try:
+            import json
+            params = {
+                'patient_id': patient_id,
+                'regimen': regimen,
+                'frequency': frequency or 'q3weeks',
+                'tests_to_monitor': tests_to_monitor or [],
+                'schedule': json.dumps(schedule) if schedule else '[]',
+                'dose_adjustments': json.dumps(dose_adjustments) if dose_adjustments else '[]',
+                'created_at': created_at or datetime.now().isoformat()
+            }
+            if inference_id:
+                params['inference_id'] = inference_id
+
+            with self.driver.session(database=self.database) as session:
+                result = session.run(query, **params)
+                record = result.single()
+                protocol_id = record["protocol_id"] if record else ""
+                logger.info(f"✓ Saved monitoring protocol: {regimen}")
+                return protocol_id
+        except Exception as e:
+            logger.error(f"Failed to save monitoring protocol: {e}")
+            return ""
+
+    def save_clinical_trial_match(self, patient_id: str, nct_id: str, title: str,
+                                   phase: str = None, status: str = None,
+                                   match_score: float = None, eligibility_criteria: List[str] = None,
+                                   matched_criteria: List[str] = None, inference_id: str = None) -> str:
+        """
+        Save clinical trial match to Neo4j.
+        WRITE: Creates ClinicalTrial node and eligibility relationship to Patient.
+
+        Args:
+            patient_id: Patient identifier
+            nct_id: ClinicalTrials.gov NCT identifier
+            title: Trial title
+            phase: Trial phase (Phase1/Phase2/Phase3)
+            status: Trial status (recruiting/active/completed)
+            match_score: Eligibility match score (0-100)
+            eligibility_criteria: All eligibility criteria
+            matched_criteria: Criteria matched by this patient
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            Clinical trial node ID
+        """
+        if not self._available:
+            logger.warning("Neo4j not available - skipping clinical trial save")
+            return ""
+
+        query = """
+        MATCH (p:Patient {patient_id: $patient_id})
+
+        MERGE (trial:ClinicalTrial {nct_id: $nct_id})
+        ON CREATE SET trial.title = $title,
+                      trial.phase = $phase,
+                      trial.status = $status,
+                      trial.created_at = datetime()
+        ON MATCH SET trial.updated_at = datetime()
+
+        MERGE (p)-[e:ELIGIBLE_FOR]->(trial)
+        SET e.eligibility_score = $match_score,
+            e.matched_criteria = $matched_criteria,
+            e.evaluated_at = datetime()
+        """ + ("""
+        WITH trial
+        MATCH (i:Inference {inference_id: $inference_id})
+        CREATE (i)-[:IDENTIFIED_TRIAL]->(trial)
+        """ if inference_id else "") + """
+        RETURN trial.nct_id as trial_id
+        """
+
+        try:
+            import json
+            params = {
+                'patient_id': patient_id,
+                'nct_id': nct_id,
+                'title': title,
+                'phase': phase or 'Unknown',
+                'status': status or 'Unknown',
+                'match_score': match_score or 0.0,
+                'matched_criteria': json.dumps(matched_criteria) if matched_criteria else '[]'
+            }
+            if inference_id:
+                params['inference_id'] = inference_id
+
+            with self.driver.session(database=self.database) as session:
+                result = session.run(query, **params)
+                record = result.single()
+                trial_id = record["trial_id"] if record else ""
+                logger.info(f"✓ Saved clinical trial match: {nct_id} (score: {match_score})")
+                return trial_id
+        except Exception as e:
+            logger.error(f"Failed to save clinical trial match: {e}")
             return ""
 
     def close(self):

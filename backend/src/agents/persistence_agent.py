@@ -121,8 +121,17 @@ class PersistenceAgent:
                 classification = patient.get('classification')
             if agent_chain is None:
                 agent_chain = patient.get('agent_chain', [])
+            # Extract new data types
+            lab_results = patient.get('lab_results', [])
+            medications = patient.get('medications', [])
+            monitoring_protocol = patient.get('monitoring_protocol')
+            eligible_trials = patient.get('eligible_trials', [])
         else:
             patient_id = patient.patient_id
+            lab_results = []
+            medications = []
+            monitoring_protocol = None
+            eligible_trials = []
 
         # Set defaults
         if agent_chain is None:
@@ -139,7 +148,7 @@ class PersistenceAgent:
             embedding = None
             if not isinstance(patient, dict) and classification:
                 embedding = self._generate_patient_embedding(patient, classification)
-            
+
             # Step 1: Save patient facts (with optional embedding)
             patient_node_id = self.write_tools.save_patient_facts(patient, embedding=embedding)
             entities_written.append(f"Patient:{patient_id}")
@@ -152,7 +161,7 @@ class PersistenceAgent:
                 agent_chain=agent_chain,
                 llm_model=llm_model
             )
-            
+
             inference_id = self.write_tools.save_inference_result(inference_record)
             entities_written.append(f"Inference:{inference_id}")
             relationships_written.append(f"Patient->Inference:{inference_id}")
@@ -167,10 +176,38 @@ class PersistenceAgent:
                 )
                 entities_written.append(f"Recommendation:{rec_id}")
                 relationships_written.append(f"Inference->Recommendation:{rec_id}")
-            
+
             logger.info(f"[{self.name}] ✓ Saved {len(classification.recommendations)} recommendations")
 
-            # Step 4: Mark previous inferences as superseded
+            # Step 4: Save lab results if present
+            if lab_results:
+                lab_ids = self._store_lab_results(patient_id, lab_results, inference_id)
+                for lab_id in lab_ids:
+                    entities_written.append(f"LabResult:{lab_id}")
+                    relationships_written.append(f"Patient->LabResult:{lab_id}")
+
+            # Step 5: Save medications if present
+            if medications:
+                med_ids = self._store_medications(patient_id, medications, inference_id)
+                for med_id in med_ids:
+                    entities_written.append(f"Medication:{med_id}")
+                    relationships_written.append(f"Patient->Medication:{med_id}")
+
+            # Step 6: Save monitoring protocol if present
+            if monitoring_protocol:
+                protocol_id = self._store_monitoring_protocol(patient_id, monitoring_protocol, inference_id)
+                if protocol_id:
+                    entities_written.append(f"MonitoringProtocol:{protocol_id}")
+                    relationships_written.append(f"Patient->MonitoringProtocol:{protocol_id}")
+
+            # Step 7: Save eligible clinical trials if present
+            if eligible_trials:
+                trial_ids = self._store_clinical_trials(patient_id, eligible_trials, inference_id)
+                for trial_id in trial_ids:
+                    entities_written.append(f"ClinicalTrial:{trial_id}")
+                    relationships_written.append(f"Patient->ClinicalTrial:{trial_id}")
+
+            # Step 8: Mark previous inferences as superseded
             obsolete_count = self.write_tools.mark_inference_obsolete(
                 patient_id=patient_id,
                 current_inference_id=inference_id
@@ -324,6 +361,163 @@ class PersistenceAgent:
                 agent_version=self.version,
                 write_sequence=self.write_count
             )
+
+    def _store_lab_results(
+        self,
+        patient_id: str,
+        lab_results: List[Dict[str, Any]],
+        inference_id: Optional[str] = None
+    ) -> List[str]:
+        """
+        Store lab results to Neo4j.
+
+        Args:
+            patient_id: Patient identifier
+            lab_results: List of lab result dictionaries
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            List of created lab result node IDs
+        """
+        created_ids = []
+        try:
+            for lab in lab_results:
+                lab_id = self.write_tools.save_lab_result(
+                    patient_id=patient_id,
+                    loinc_code=lab.get('loinc_code'),
+                    test_name=lab.get('test_name', lab.get('loinc_name', 'Unknown')),
+                    value=lab.get('value', 0.0),
+                    unit=lab.get('unit', lab.get('units', '')),
+                    reference_range=lab.get('reference_range'),
+                    interpretation=lab.get('interpretation'),
+                    severity=lab.get('severity'),
+                    test_date=lab.get('test_date'),
+                    inference_id=inference_id
+                )
+                if lab_id:
+                    created_ids.append(lab_id)
+            if created_ids:
+                logger.info(f"[{self.name}] ✓ Stored {len(created_ids)} lab results")
+        except Exception as e:
+            logger.error(f"[{self.name}] ✗ Failed to store lab results: {e}")
+
+        return created_ids
+
+    def _store_medications(
+        self,
+        patient_id: str,
+        medications: List[Dict[str, Any]],
+        inference_id: Optional[str] = None
+    ) -> List[str]:
+        """
+        Store medications to Neo4j.
+
+        Args:
+            patient_id: Patient identifier
+            medications: List of medication dictionaries
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            List of created medication node IDs
+        """
+        created_ids = []
+        try:
+            for med in medications:
+                med_id = self.write_tools.save_medication(
+                    patient_id=patient_id,
+                    rxcui=med.get('rxcui'),
+                    drug_name=med.get('drug_name', med.get('name', 'Unknown')),
+                    dose=med.get('dose'),
+                    frequency=med.get('frequency'),
+                    route=med.get('route'),
+                    start_date=med.get('start_date'),
+                    end_date=med.get('end_date'),
+                    status=med.get('status', 'active'),
+                    inference_id=inference_id
+                )
+                if med_id:
+                    created_ids.append(med_id)
+            if created_ids:
+                logger.info(f"[{self.name}] ✓ Stored {len(created_ids)} medications")
+        except Exception as e:
+            logger.error(f"[{self.name}] ✗ Failed to store medications: {e}")
+
+        return created_ids
+
+    def _store_monitoring_protocol(
+        self,
+        patient_id: str,
+        monitoring_protocol: Dict[str, Any],
+        inference_id: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Store monitoring protocol to Neo4j.
+
+        Args:
+            patient_id: Patient identifier
+            monitoring_protocol: Monitoring protocol dictionary
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            Created protocol node ID or None
+        """
+        try:
+            protocol_id = self.write_tools.save_monitoring_protocol(
+                patient_id=patient_id,
+                regimen=monitoring_protocol.get('regimen', 'Unknown'),
+                frequency=monitoring_protocol.get('frequency'),
+                tests_to_monitor=monitoring_protocol.get('tests_to_monitor', []),
+                schedule=monitoring_protocol.get('schedule', []),
+                dose_adjustments=monitoring_protocol.get('dose_adjustments', []),
+                created_at=monitoring_protocol.get('created_at'),
+                inference_id=inference_id
+            )
+            if protocol_id:
+                logger.info(f"[{self.name}] ✓ Stored monitoring protocol")
+            return protocol_id
+        except Exception as e:
+            logger.error(f"[{self.name}] ✗ Failed to store monitoring protocol: {e}")
+            return None
+
+    def _store_clinical_trials(
+        self,
+        patient_id: str,
+        clinical_trials: List[Dict[str, Any]],
+        inference_id: Optional[str] = None
+    ) -> List[str]:
+        """
+        Store clinical trial matches to Neo4j.
+
+        Args:
+            patient_id: Patient identifier
+            clinical_trials: List of clinical trial match dictionaries
+            inference_id: Optional inference ID to link to
+
+        Returns:
+            List of created trial match node IDs
+        """
+        created_ids = []
+        try:
+            for trial in clinical_trials:
+                trial_id = self.write_tools.save_clinical_trial_match(
+                    patient_id=patient_id,
+                    nct_id=trial.get('nct_id'),
+                    title=trial.get('title', trial.get('brief_title', 'Unknown')),
+                    phase=trial.get('phase'),
+                    status=trial.get('status'),
+                    match_score=trial.get('match_score', trial.get('eligibility_score', 0.0)),
+                    eligibility_criteria=trial.get('eligibility_criteria', []),
+                    matched_criteria=trial.get('matched_criteria', []),
+                    inference_id=inference_id
+                )
+                if trial_id:
+                    created_ids.append(trial_id)
+            if created_ids:
+                logger.info(f"[{self.name}] ✓ Stored {len(created_ids)} clinical trial matches")
+        except Exception as e:
+            logger.error(f"[{self.name}] ✗ Failed to store clinical trials: {e}")
+
+        return created_ids
 
     def get_write_stats(self) -> Dict[str, Any]:
         """Get statistics about writes performed."""
