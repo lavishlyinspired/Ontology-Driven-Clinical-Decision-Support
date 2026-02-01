@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2, CheckCircle, XCircle, AlertCircle, Bot, User, Activity, Zap, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { GraphData, GraphNode } from '@/lib/api'
 import { McpAppHost } from './McpAppHost'
 import { GroundedCitations } from './GroundedCitations'
@@ -68,20 +69,38 @@ interface LogEntry {
   timestamp: string
 }
 
-const JSONDisplay = ({ data }: { data: any }) => (
-  <div className="bg-slate-800 rounded-xl p-4 overflow-x-auto my-3">
-    <div className="flex items-center gap-2 mb-2 text-slate-400 text-xs">
-      <Activity className="w-3 h-3" />
-      <span>Extracted Patient Data</span>
+const JSONDisplay = ({ data }: { data: any }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  
+  return (
+    <div className="bg-slate-800 rounded-xl overflow-hidden my-3">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between p-3 hover:bg-slate-700 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-slate-400 text-xs">
+          <Activity className="w-3 h-3" />
+          <span>Extracted Patient Data</span>
+        </div>
+        {isExpanded ? (
+          <ChevronUp className="w-4 h-4 text-slate-400" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-slate-400" />
+        )}
+      </button>
+      {isExpanded && (
+        <div className="p-4 pt-0 overflow-x-auto">
+          <pre className="text-sm text-green-400 font-mono">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
-    <pre className="text-sm text-green-400 font-mono">
-      {JSON.stringify(data, null, 2)}
-    </pre>
-  </div>
-)
+  )
+}
 
 const WorkflowTimeline = ({ steps, isStreaming = false }: { steps: WorkflowStep[], isStreaming?: boolean }) => {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   // Function to parse agent execution messages for better display
   const parseAgentMessage = (content: string) => {
@@ -735,7 +754,33 @@ Try describing a patient to get started!`,
                         }}
                       />
                     ) : (
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          table: ({ node, ...props }) => (
+                            <div className="overflow-x-auto my-4">
+                              <table className="min-w-full divide-y divide-gray-300 border border-gray-300" {...props} />
+                            </div>
+                          ),
+                          thead: ({ node, ...props }) => (
+                            <thead className="bg-gray-50" {...props} />
+                          ),
+                          tbody: ({ node, ...props }) => (
+                            <tbody className="divide-y divide-gray-200 bg-white" {...props} />
+                          ),
+                          tr: ({ node, ...props }) => (
+                            <tr {...props} />
+                          ),
+                          th: ({ node, ...props }) => (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border border-gray-300" {...props} />
+                          ),
+                          td: ({ node, ...props }) => (
+                            <td className="px-4 py-2 text-sm text-gray-900 border border-gray-300" {...props} />
+                          ),
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
                     )
                   ) : (
                     <div className="flex items-center gap-2 text-gray-400">
