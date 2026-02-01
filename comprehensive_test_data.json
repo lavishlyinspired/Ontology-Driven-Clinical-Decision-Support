@@ -1,0 +1,512 @@
+{
+  "comprehensive_test_scenarios": {
+    "metadata": {
+      "version": "2.0",
+      "created_date": "2026-02-01",
+      "description": "Comprehensive test data for LCA system covering all components",
+      "total_scenarios": 50,
+      "categories": [
+        "infrastructure",
+        "data_ingestion",
+        "agent_testing",
+        "workflow_orchestration", 
+        "conversation_ai",
+        "enhanced_features",
+        "integration_testing",
+        "edge_cases"
+      ]
+    },
+    
+    "infrastructure_tests": [
+      {
+        "test_id": "INFRA_001",
+        "category": "infrastructure",
+        "name": "Database Connectivity",
+        "description": "Test Neo4j and Redis connectivity",
+        "endpoint": "GET /health",
+        "expected_status": 200,
+        "expected_response": {
+          "neo4j_status": "connected",
+          "redis_status": "connected"
+        }
+      },
+      {
+        "test_id": "INFRA_002", 
+        "category": "infrastructure",
+        "name": "Service Health Check",
+        "description": "Verify all services are healthy",
+        "endpoint": "GET /chat/health",
+        "expected_status": 200,
+        "expected_response": {
+          "enhanced_features_available": true
+        }
+      }
+    ],
+
+    "data_ingestion_tests": [
+      {
+        "test_id": "EXTRACT_001",
+        "category": "data_ingestion",
+        "name": "Simple Patient Extraction",
+        "description": "Basic patient data extraction from natural language",
+        "input_message": "68 year old male, stage IIIA adenocarcinoma, EGFR Ex19del+",
+        "expected_extraction": {
+          "age_at_diagnosis": 68,
+          "sex": "M",
+          "tnm_stage": "IIIA", 
+          "histology_type": "Adenocarcinoma",
+          "biomarker_profile": {
+            "egfr_mutation": "Positive",
+            "egfr_mutation_type": "Ex19del"
+          }
+        },
+        "complexity": "MODERATE"
+      },
+      {
+        "test_id": "EXTRACT_002",
+        "category": "data_ingestion",
+        "name": "Complex Biomarker Extraction",
+        "description": "Extract multiple biomarkers and complex patient info",
+        "input_message": "65F, stage IV adenocarcinoma, EGFR negative, ALK negative, PD-L1 TPS 75%, TMB-high, never smoker, brain mets",
+        "expected_extraction": {
+          "age_at_diagnosis": 65,
+          "sex": "F",
+          "tnm_stage": "IV",
+          "histology_type": "Adenocarcinoma",
+          "biomarker_profile": {
+            "egfr_mutation": "Negative",
+            "alk_rearrangement": "Negative",
+            "pdl1_tps": 75,
+            "tmb_score": "High"
+          },
+          "smoking_status": "Never smoker",
+          "metastases": ["Brain"]
+        },
+        "complexity": "COMPLEX"
+      },
+      {
+        "test_id": "EXTRACT_003",
+        "category": "data_ingestion",
+        "name": "SCLC with Comorbidities",
+        "description": "SCLC patient with multiple comorbidities",
+        "input_message": "72F, extensive stage small cell lung cancer, PS 2, COPD, diabetes, creatinine 1.8, on warfarin",
+        "expected_extraction": {
+          "age_at_diagnosis": 72,
+          "sex": "F",
+          "tnm_stage": "Extensive",
+          "histology_type": "Small Cell",
+          "performance_status": 2,
+          "comorbidities": ["COPD", "diabetes", "renal_impairment"],
+          "medications": ["warfarin"]
+        },
+        "complexity": "COMPLEX"
+      }
+    ],
+
+    "agent_testing_scenarios": [
+      {
+        "test_id": "AGENT_BIO_001",
+        "category": "agent_testing",
+        "agent": "BiomarkerAgent",
+        "name": "EGFR Ex19del Pathway",
+        "patient_data": {
+          "patient_id": "AGENT_TEST_001",
+          "age_at_diagnosis": 68,
+          "tnm_stage": "IIIA",
+          "histology_type": "Adenocarcinoma",
+          "performance_status": 1
+        },
+        "biomarker_profile": {
+          "egfr_mutation": "Positive",
+          "egfr_mutation_type": "Ex19del"
+        },
+        "expected_treatment": "Osimertinib",
+        "expected_evidence": "Grade A",
+        "expected_confidence": ">= 0.9",
+        "special_considerations": ["multimodal_approach_IIIA"]
+      },
+      {
+        "test_id": "AGENT_BIO_002",
+        "category": "agent_testing", 
+        "agent": "BiomarkerAgent",
+        "name": "ALK Positive Pathway",
+        "patient_data": {
+          "patient_id": "AGENT_TEST_002",
+          "age_at_diagnosis": 55,
+          "tnm_stage": "IV",
+          "histology_type": "Adenocarcinoma",
+          "performance_status": 1
+        },
+        "biomarker_profile": {
+          "alk_rearrangement": "Positive"
+        },
+        "expected_treatment": "Alectinib",
+        "expected_evidence": "Grade A",
+        "expected_confidence": ">= 0.9"
+      },
+      {
+        "test_id": "AGENT_NSCLC_001",
+        "category": "agent_testing",
+        "agent": "NSCLCAgent", 
+        "name": "Early Stage Resectable",
+        "patient_data": {
+          "patient_id": "AGENT_TEST_003",
+          "age_at_diagnosis": 58,
+          "tnm_stage": "IB",
+          "histology_type": "Adenocarcinoma",
+          "performance_status": 0
+        },
+        "biomarker_profile": {"egfr_mutation": "Negative"},
+        "expected_treatment": "Surgical resection",
+        "expected_intent": "curative",
+        "expected_confidence": ">= 0.85"
+      },
+      {
+        "test_id": "AGENT_SCLC_001",
+        "category": "agent_testing",
+        "agent": "SCLCAgent",
+        "name": "Limited Stage SCLC",
+        "patient_data": {
+          "patient_id": "AGENT_TEST_004",
+          "age_at_diagnosis": 65,
+          "tnm_stage": "Limited",
+          "histology_type": "Small Cell",
+          "performance_status": 1
+        },
+        "expected_treatment": "Concurrent chemoradiotherapy",
+        "expected_evidence": "Grade A"
+      }
+    ],
+
+    "workflow_orchestration_tests": [
+      {
+        "test_id": "WORKFLOW_001",
+        "category": "workflow_orchestration",
+        "name": "Simple Workflow Execution",
+        "description": "Test basic 11-agent integrated workflow",
+        "patient_data": {
+          "patient_id": "WORKFLOW_TEST_001",
+          "age_at_diagnosis": 68,
+          "sex": "Male",
+          "tnm_stage": "IIIA",
+          "histology_type": "Adenocarcinoma",
+          "performance_status": 1,
+          "biomarker_profile": {
+            "egfr_mutation": "Positive",
+            "egfr_mutation_type": "Ex19del"
+          }
+        },
+        "expected_agents": [
+          "IngestionAgent",
+          "SemanticMappingAgent", 
+          "ClassificationAgent",
+          "BiomarkerAgent",
+          "NSCLCAgent",
+          "ExplanationAgent",
+          "PersistenceAgent"
+        ],
+        "expected_primary_treatment": "Osimertinib",
+        "expected_execution_time": "< 10s"
+      },
+      {
+        "test_id": "WORKFLOW_002",
+        "category": "workflow_orchestration",
+        "name": "Complex Workflow with Comorbidities",
+        "description": "Test workflow with comorbidity management",
+        "patient_data": {
+          "patient_id": "WORKFLOW_TEST_002",
+          "age_at_diagnosis": 72,
+          "sex": "Female",
+          "tnm_stage": "Extensive",
+          "histology_type": "Small Cell",
+          "performance_status": 2,
+          "comorbidities": ["COPD", "diabetes", "renal_impairment"]
+        },
+        "expected_agents": [
+          "IngestionAgent",
+          "SemanticMappingAgent",
+          "ClassificationAgent", 
+          "ComorbidityAgent",
+          "SCLCAgent",
+          "ConflictResolutionAgent",
+          "ExplanationAgent"
+        ],
+        "expected_considerations": ["dose_adjustment", "comorbidity_management"]
+      }
+    ],
+
+    "conversation_ai_tests": [
+      {
+        "test_id": "CHAT_001",
+        "category": "conversation_ai",
+        "name": "Basic Patient Analysis Chat",
+        "description": "Test basic chat functionality with patient analysis",
+        "conversation_flow": [
+          {
+            "user": "68M, stage IIIA adenocarcinoma, EGFR Ex19del+",
+            "expected_intent": "patient_analysis",
+            "expected_response_includes": ["osimertinib", "Grade A", "IIIA"]
+          }
+        ]
+      },
+      {
+        "test_id": "CHAT_002", 
+        "category": "conversation_ai",
+        "name": "Follow-up Question Flow",
+        "description": "Test follow-up question handling",
+        "conversation_flow": [
+          {
+            "user": "68M, stage IIIA adenocarcinoma, EGFR Ex19del+",
+            "expected_intent": "patient_analysis"
+          },
+          {
+            "user": "What are the side effects of osimertinib?",
+            "expected_intent": "follow_up",
+            "expected_response_includes": ["diarrhea", "rash", "monitoring"]
+          }
+        ]
+      },
+      {
+        "test_id": "CHAT_003",
+        "category": "conversation_ai",
+        "name": "General Q&A",
+        "description": "Test general question answering",
+        "conversation_flow": [
+          {
+            "user": "Hello, how can you help me?",
+            "expected_intent": "general_qa",
+            "expected_response_includes": ["lung cancer", "treatment decisions", "patient case"]
+          }
+        ]
+      }
+    ],
+
+    "enhanced_features_tests": [
+      {
+        "test_id": "ENHANCED_001",
+        "category": "enhanced_features",
+        "name": "LangGraph Memory Test",
+        "description": "Test LangGraph memory and state persistence",
+        "use_enhanced_features": true,
+        "conversation_flow": [
+          {
+            "user": "68M, stage IIIA adenocarcinoma, EGFR Ex19del+",
+            "expected_response_type": "analysis_with_followup"
+          },
+          {
+            "user": "What about alternative treatments for this patient?",
+            "expected_memory_reference": true,
+            "expected_response_includes": ["egfr", "stage IIIA", "alternatives"]
+          }
+        ]
+      },
+      {
+        "test_id": "ENHANCED_002",
+        "category": "enhanced_features",
+        "name": "Follow-up Question Generation",
+        "description": "Test intelligent follow-up question generation",
+        "use_enhanced_features": true,
+        "patient_case": "65F, stage IV adenocarcinoma, PD-L1 85%",
+        "expected_followup_questions": [
+          "side effects",
+          "alternative", 
+          "similar cases",
+          "clinical trials"
+        ],
+        "minimum_questions": 3
+      },
+      {
+        "test_id": "ENHANCED_003",
+        "category": "enhanced_features",
+        "name": "Thread Persistence",
+        "description": "Test conversation thread persistence across sessions",
+        "use_enhanced_features": true,
+        "test_steps": [
+          {
+            "action": "start_conversation",
+            "user": "68M, stage IIIA adenocarcinoma, EGFR Ex19del+"
+          },
+          {
+            "action": "get_thread_id",
+            "expected": "thread_id_returned"
+          },
+          {
+            "action": "continue_conversation_same_thread",
+            "user": "Tell me more about this treatment",
+            "expected": "memory_preserved"
+          }
+        ]
+      }
+    ],
+
+    "integration_tests": [
+      {
+        "test_id": "INTEGRATION_001",
+        "category": "integration",
+        "name": "End-to-End Patient Journey",
+        "description": "Complete patient journey from input to decision support",
+        "test_steps": [
+          {
+            "step": 1,
+            "action": "submit_patient_case",
+            "endpoint": "POST /chat/stream",
+            "payload": {
+              "message": "68M, stage IIIA adenocarcinoma, EGFR Ex19del+, PS 1",
+              "session_id": "e2e_test_001",
+              "use_enhanced_features": true
+            },
+            "expected_events": ["patient_data", "complexity", "progress", "text", "follow_up_suggestions"]
+          },
+          {
+            "step": 2,
+            "action": "get_followup_suggestions",
+            "endpoint": "GET /chat/follow-up/e2e_test_001",
+            "expected_min_suggestions": 3
+          },
+          {
+            "step": 3,
+            "action": "ask_followup",
+            "endpoint": "POST /chat/stream",
+            "payload": {
+              "message": "What are the monitoring requirements?",
+              "session_id": "e2e_test_001"
+            },
+            "expected_memory_reference": true
+          }
+        ]
+      },
+      {
+        "test_id": "INTEGRATION_002",
+        "category": "integration",
+        "name": "MCP Tool Integration",
+        "description": "Test MCP tool integration with conversation",
+        "test_steps": [
+          {
+            "step": 1,
+            "action": "trigger_mcp_tool",
+            "message": "Get treatment options for stage IV NSCLC with EGFR mutation",
+            "expected_mcp_tool": "get_treatment_options"
+          },
+          {
+            "step": 2,
+            "action": "verify_mcp_response",
+            "expected_treatments": ["osimertinib", "gefitinib", "erlotinib"]
+          }
+        ]
+      }
+    ],
+
+    "edge_cases_and_error_handling": [
+      {
+        "test_id": "EDGE_001",
+        "category": "edge_cases",
+        "name": "Empty Input",
+        "description": "Test handling of empty or invalid input",
+        "input_cases": [
+          "",
+          "   ",
+          "random text with no patient information",
+          "50M",
+          "stage V cancer",
+          "200 year old patient"
+        ],
+        "expected_behavior": "graceful_handling_with_guidance"
+      },
+      {
+        "test_id": "EDGE_002",
+        "category": "edge_cases", 
+        "name": "Concurrent Sessions",
+        "description": "Test multiple concurrent sessions don't interfere",
+        "concurrent_sessions": [
+          {
+            "session_id": "concurrent_1",
+            "message": "68M, stage IIIA adenocarcinoma, EGFR+"
+          },
+          {
+            "session_id": "concurrent_2", 
+            "message": "72F, extensive SCLC"
+          },
+          {
+            "session_id": "concurrent_3",
+            "message": "65F, stage IV adenocarcinoma, ALK+"
+          }
+        ],
+        "expected": "all_sessions_independent"
+      },
+      {
+        "test_id": "EDGE_003",
+        "category": "edge_cases",
+        "name": "Service Unavailability",
+        "description": "Test behavior when services are unavailable",
+        "scenarios": [
+          {
+            "condition": "neo4j_down",
+            "expected": "fallback_gracefully"
+          },
+          {
+            "condition": "langgraph_unavailable", 
+            "expected": "disable_enhanced_features"
+          }
+        ]
+      }
+    ],
+
+    "performance_benchmarks": [
+      {
+        "test_id": "PERF_001",
+        "category": "performance",
+        "name": "Response Time Benchmarks",
+        "targets": {
+          "patient_extraction": "< 500ms",
+          "agent_execution": "< 2s",
+          "full_workflow": "< 10s",
+          "chat_first_token": "< 1s",
+          "follow_up_generation": "< 500ms"
+        }
+      },
+      {
+        "test_id": "PERF_002",
+        "category": "performance", 
+        "name": "Load Testing",
+        "scenarios": {
+          "concurrent_users": 10,
+          "requests_per_user": 5,
+          "target_success_rate": "> 95%",
+          "max_response_time": "< 15s"
+        }
+      }
+    ],
+
+    "api_test_scripts": {
+      "basic_chat_test": {
+        "curl_command": "curl -X POST 'http://localhost:8000/chat/stream' -H 'Content-Type: application/json' -d '{\"message\": \"68M, stage IIIA adenocarcinoma, EGFR Ex19del+\", \"session_id\": \"test_001\"}'",
+        "expected_status": 200,
+        "expected_content_type": "text/event-stream"
+      },
+      "enhanced_chat_test": {
+        "curl_command": "curl -X POST 'http://localhost:8000/chat/stream' -H 'Content-Type: application/json' -d '{\"message\": \"68M, stage IIIA adenocarcinoma, EGFR Ex19del+\", \"session_id\": \"enhanced_001\", \"use_enhanced_features\": true}'",
+        "expected_sse_events": ["patient_data", "follow_up_suggestions"]
+      },
+      "follow_up_test": {
+        "curl_command": "curl -X GET 'http://localhost:8000/chat/follow-up/test_session'",
+        "expected_response": {
+          "session_id": "test_session",
+          "suggestions": ["array of strings"],
+          "count": "number"
+        }
+      }
+    },
+
+    "test_execution_order": [
+      "infrastructure_tests",
+      "data_ingestion_tests", 
+      "agent_testing_scenarios",
+      "workflow_orchestration_tests",
+      "conversation_ai_tests",
+      "enhanced_features_tests",
+      "integration_tests",
+      "edge_cases_and_error_handling",
+      "performance_benchmarks"
+    ]
+  }
+}

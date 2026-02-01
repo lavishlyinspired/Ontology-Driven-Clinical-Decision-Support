@@ -1,35 +1,16 @@
 """
 Conversational Service for LCA Chatbot
 Handles natural language interaction with the LCA system
-Enhanced with LangChain/LangGraph for memory and intelligent conversations
 """
 
 import json
 import re
 import logging
-from typing import Dict, List, Optional, AsyncIterator, Any, Literal
+from typing import Dict, List, Optional, AsyncIterator, Any
 from datetime import datetime
 import asyncio
-import uuid
-from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field, field_validator
-# Centralized logging
-from ..logging_config import get_logger, log_execution
-
-logger = get_logger(__name__)
-# LangChain/LangGraph imports for enhanced conversations
-try:
-    from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-    from langchain_core.runnables import RunnableConfig
-    from langgraph.checkpoint.memory import InMemorySaver
-    from langgraph.checkpoint.base import BaseCheckpointSaver
-    from langgraph.graph import StateGraph, END
-    from langgraph.graph.message import add_messages
-    LANGGRAPH_AVAILABLE = True
-except ImportError:
-    logger.warning("LangChain/LangGraph not available - enhanced features disabled")
-    LANGGRAPH_AVAILABLE = False
 
 # Centralized logging
 from ..logging_config import get_logger, log_execution, create_sse_log_handler
@@ -41,84 +22,6 @@ from .mcp_client import get_mcp_invoker
 from .clustering_service import ClusteringService, ClusteringMethod
 
 logger = get_logger(__name__)
-
-
-# =============================================================================
-# Enhanced Conversation State Management
-# =============================================================================
-
-@dataclass
-class ConversationContext:
-    """Enhanced conversation context for memory and state management"""
-    patient_cases: Dict[str, Dict] = field(default_factory=dict)
-    analysis_history: List[Dict[str, Any]] = field(default_factory=list)
-    user_preferences: Dict[str, Any] = field(default_factory=dict)
-    clinical_domain: str = "lung_cancer"
-    expertise_level: str = "expert"  # novice, intermediate, expert
-    last_analysis_id: Optional[str] = None
-    follow_up_suggestions: List[str] = field(default_factory=list)
-    active_thread_id: Optional[str] = None
-
-if LANGGRAPH_AVAILABLE:
-    class EnhancedConversationState(BaseModel):
-        """LangGraph state for enhanced conversation management"""
-        messages: List[BaseMessage] = Field(default_factory=list)
-        patient_data: Optional[Dict] = None
-        analysis_result: Optional[Dict[str, Any]] = None
-        follow_up_questions: List[str] = Field(default_factory=list)
-        context: ConversationContext = Field(default_factory=ConversationContext)
-        next_action: Optional[str] = None
-        awaiting_input: bool = False
-        session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-        thread_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-
-class FollowUpGenerator:
-    """Enhanced follow-up question generation"""
-    
-    @staticmethod
-    def generate_clinical_questions(analysis_result: Dict[str, Any], patient_data: Dict) -> List[str]:
-        """Generate intelligent follow-up questions based on analysis"""
-        questions = []
-        
-        if not analysis_result or not analysis_result.get("recommendations"):
-            return ["Could you provide more details about the patient case?"]
-        
-        primary_rec = analysis_result["recommendations"][0]
-        treatment = primary_rec.get("treatment", "")
-        stage = patient_data.get("tnm_stage", "")
-        biomarkers = patient_data.get("biomarker_profile", {})
-        
-        # Treatment-specific questions
-        if "osimertinib" in treatment.lower():
-            questions.extend([
-                "Would you like to know about potential side effects of osimertinib?",
-                "Are you interested in alternative treatment options for EGFR+ NSCLC?",
-                "Should we discuss resistance mechanisms and second-line therapies?"
-            ])
-        
-        if "chemotherapy" in treatment.lower():
-            questions.extend([
-                "Would you like dosing recommendations based on performance status?",
-                "Should we review potential drug interactions?",
-                "Are you interested in supportive care guidelines?"
-            ])
-        
-        # Stage-specific questions
-        if stage in ["IIIA", "IIIB"]:
-            questions.extend([
-                "Would you like to explore surgical candidacy assessment?",
-                "Should we discuss radiation therapy sequencing?",
-                "Are you interested in neoadjuvant vs adjuvant approaches?"
-            ])
-        
-        # Always include general options
-        questions.extend([
-            "Would you like to see similar cases from our database?",
-            "Should I explain the clinical reasoning in more detail?",
-            "Are you interested in current clinical trial options?"
-        ])
-        
-        return questions[:5]  # Limit to 5 suggestions
 
 
 # --- Pydantic model for validated patient data extraction ---
@@ -152,113 +55,17 @@ class ConversationService:
     Features:
     - Natural language patient data extraction with Pydantic validation
     - Streaming responses via SSE
-    - Session-based conversation history with LangGraph memory
+    - Session-based conversation history
     - Intent classification (patient analysis, follow-up, general Q&A)
     - Context-aware follow-up handling
-    - Enhanced conversation flow with intelligent follow-up suggestions
-    - Thread-based conversation persistence
     """
 
-    def __init__(self, lca_service, enable_enhanced_features=True):
+    def __init__(self, lca_service):
         self.lca_service = lca_service
         self.sessions: Dict[str, List[Dict]] = {}  # session_id -> message history
         self.patient_context: Dict[str, Dict] = {}  # session_id -> {patient_data, result}
-        self.enhanced_context: Dict[str, ConversationContext] = {}  # session_id -> enhanced context
-        
-        # Enhanced features
-        self.enable_enhanced_features = enable_enhanced_features and LANGGRAPH_AVAILABLE
-        self.follow_up_generator = FollowUpGenerator()
-        
-        # LangGraph setup for enhanced conversations
-        if self.enable_enhanced_features:
-            self.checkpointer = InMemorySaver()
-            self.conversation_graph = self._build_enhanced_graph()
-            logger.info("Enhanced conversation features enabled with LangGraph")
-        else:
-            self.checkpointer = None
-            self.conversation_graph = None
-            if enable_enhanced_features:
-                logger.warning("Enhanced features requested but LangGraph not available")
         self.mcp_invoker = get_mcp_invoker()  # MCP tool integration
         self.clustering_service = ClusteringService()  # Patient clustering
-
-    def _build_enhanced_graph(self):
-        """Build LangGraph conversation flow for enhanced interactions"""
-        if not LANGGRAPH_AVAILABLE:
-            return None
-            
-        def route_input(state: 'EnhancedConversationState') -> Literal["analyze_patient", "follow_up", "general_chat"]:
-            """Route user input to appropriate handler"""
-            if not state.messages:
-                return "general_chat"
-            
-            last_message = state.messages[-1].content.lower()
-            
-            # Check if this looks like patient data
-            patient_indicators = ["year old", "stage", "adenocarcinoma", "squamous", "egfr", "alk", "pdl1"]
-            if any(indicator in last_message for indicator in patient_indicators):
-                return "analyze_patient"
-            
-            # Check if this is a follow-up question
-            if state.analysis_result and any(word in last_message for word in ["why", "what", "how", "explain", "alternative", "side effect"]):
-                return "follow_up"
-            
-            return "general_chat"
-        
-        async def analyze_patient_node(state: 'EnhancedConversationState') -> 'EnhancedConversationState':
-            """Enhanced patient analysis with follow-up generation"""
-            last_message = state.messages[-1].content
-            
-            # Use existing patient analysis logic but capture results
-            analysis_result = None
-            patient_data = None
-            
-            try:
-                # Generate follow-up questions based on results
-                follow_ups = []
-                if analysis_result and patient_data:
-                    follow_ups = self.follow_up_generator.generate_clinical_questions(
-                        analysis_result, patient_data
-                    )
-                
-                # Update context
-                state.context.analysis_history.append({
-                    "timestamp": datetime.now().isoformat(),
-                    "query": last_message,
-                    "result": analysis_result
-                })
-                
-                return EnhancedConversationState(
-                    messages=state.messages + [AIMessage(content="Analysis completed with enhanced suggestions")],
-                    patient_data=patient_data,
-                    analysis_result=analysis_result,
-                    follow_up_questions=follow_ups,
-                    context=state.context,
-                    session_id=state.session_id,
-                    thread_id=state.thread_id
-                )
-                
-            except Exception as e:
-                logger.error(f"Enhanced analysis error: {e}")
-                return state
-        
-        # Build the graph
-        workflow = StateGraph(EnhancedConversationState)
-        workflow.add_node("analyze_patient", analyze_patient_node)
-        workflow.add_conditional_edges("__start__", route_input, {
-            "analyze_patient": "analyze_patient",
-            "follow_up": "analyze_patient",  # Reuse for now
-            "general_chat": "analyze_patient"   # Simplified for now
-        })
-        workflow.add_edge("analyze_patient", END)
-        
-        return workflow.compile(checkpointer=self.checkpointer)
-
-    def _get_enhanced_context(self, session_id: str) -> ConversationContext:
-        """Get or create enhanced conversation context"""
-        if session_id not in self.enhanced_context:
-            self.enhanced_context[session_id] = ConversationContext()
-        return self.enhanced_context[session_id]
 
     def _get_session(self, session_id: str) -> List[Dict]:
         """Get or create conversation session"""
@@ -278,44 +85,28 @@ class ConversationService:
     async def chat_stream(
         self,
         session_id: str,
-        message: str,
-        use_enhanced_features: bool = None
+        message: str
     ) -> AsyncIterator[str]:
         """
-        Stream conversational responses with optional enhanced features
+        Stream conversational responses
 
         Args:
             session_id: Unique session identifier
             message: User message
-            use_enhanced_features: Whether to use LangGraph enhanced features (defaults to service setting)
 
         Yields:
-            SSE-formatted chunks with potential follow-up suggestions
+            SSE-formatted chunks
         """
-        # Determine whether to use enhanced features
-        use_enhanced = use_enhanced_features if use_enhanced_features is not None else self.enable_enhanced_features
-        
         try:
             # Add user message to history
             self._add_to_history(session_id, "user", message)
 
-            # Classify intent with session context first
+            # Classify intent with session context
             intent = self._classify_intent(message, session_id)
-
-            # Enhanced features: check if we should use LangGraph flow
-            if use_enhanced and intent == "patient_analysis" and self.conversation_graph:
-                async for chunk in self._stream_enhanced_analysis(message, session_id):
-                    yield chunk
-                return
 
             if intent == "patient_analysis":
                 async for chunk in self._stream_patient_analysis(message, session_id):
                     yield chunk
-                
-                # Enhanced: Generate follow-up suggestions after analysis
-                if use_enhanced:
-                    await self._add_follow_up_suggestions(session_id)
-                    
             elif intent == "follow_up":
                 async for chunk in self._stream_follow_up(message, session_id):
                     yield chunk
@@ -439,9 +230,6 @@ class ConversationService:
 
         patient_data = self._extract_patient_data(message)
 
-        # Debug log the extracted data
-        logger.info(f"[DEBUG] Extracted patient data: {patient_data}")
-
         if not patient_data:
             yield self._format_sse({
                 "type": "error",
@@ -453,10 +241,6 @@ class ConversationService:
         extraction_meta = patient_data.pop("_extraction_meta", {})
         missing_fields = extraction_meta.get("missing_fields", [])
         extracted_fields = extraction_meta.get("extracted_fields", [])
-
-        # Debug log the extraction metadata
-        logger.info(f"[DEBUG] Missing fields: {missing_fields}")
-        logger.info(f"[DEBUG] Extracted fields: {extracted_fields}")
 
         if missing_fields:
             # Stream what was extracted
@@ -659,13 +443,6 @@ class ConversationService:
                 # Get result
                 result = await processing_task
 
-                # Debug log the result
-                logger.info(f"[DEBUG] LCA processing result: recommendations={len(result.recommendations) if result.recommendations else 0}")
-                if result.recommendations:
-                    logger.info(f"[DEBUG] First recommendation: {result.recommendations[0]}")
-                else:
-                    logger.error(f"[DEBUG] No recommendations generated for patient data: {patient_data}")
-
                 # Stream any remaining items
                 while not progress_queue.empty():
                     msg_type, msg = await progress_queue.get()
@@ -714,32 +491,12 @@ class ConversationService:
             })
 
             # Debug logging
-            logger.info(f"Result has {len(result.recommendations) if result.recommendations else 0} recommendations")
+            logger.info(f"Result has {len(result.recommendations)} recommendations")
             if result.recommendations:
                 logger.info(f"First recommendation: {result.recommendations[0]}")
-            else:
-                logger.warning("No recommendations generated by LCA service")
 
-            # Format recommendations - always yield something
-            if result.recommendations:
-                recommendations_text = self._format_recommendations(result)
-            else:
-                recommendations_text = """## Analysis Complete
-
-⚠️ **No specific treatment recommendations generated.**
-
-The system successfully analyzed your patient case but did not generate specific treatment recommendations. This may be due to:
-
-- **Insufficient patient data**: Consider adding more clinical details
-- **Complex case requirements**: May require MDT discussion
-- **Missing biomarker data**: Molecular testing results may be needed
-- **Staging clarification**: TNM staging may need verification
-
-**Suggestions:**
-- Provide additional patient history, imaging results, or lab values
-- Include performance status and comorbidities
-- Specify molecular testing results if available
-- Consider manual clinical review for complex cases"""
+            # Format recommendations
+            recommendations_text = self._format_recommendations(result)
 
             yield self._format_sse({
                 "type": "recommendation",
@@ -2941,121 +2698,6 @@ For the best results, please describe a patient case with:
 Example: "68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PS 1"
 """
 
-    # =============================================================================
-    # Enhanced Conversation Methods
-    # =============================================================================
-
-    async def _stream_enhanced_analysis(self, message: str, session_id: str) -> AsyncIterator[str]:
-        """Enhanced patient analysis with LangGraph integration"""
-        if not self.enable_enhanced_features or not self.conversation_graph:
-            # Fallback to regular analysis
-            async for chunk in self._stream_patient_analysis(message, session_id):
-                yield chunk
-            return
-
-        try:
-            # Use thread_id for LangGraph persistence
-            context = self._get_enhanced_context(session_id)
-            thread_id = context.active_thread_id or str(uuid.uuid4())
-            context.active_thread_id = thread_id
-
-            # Configuration for LangGraph
-            config: RunnableConfig = {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "session_id": session_id
-                }
-            }
-
-            # Prepare initial state
-            if LANGGRAPH_AVAILABLE:
-                initial_state = EnhancedConversationState(
-                    messages=[HumanMessage(content=message)],
-                    context=context,
-                    session_id=session_id,
-                    thread_id=thread_id
-                )
-
-                # Stream the enhanced conversation
-                async for chunk in self.conversation_graph.astream(initial_state, config=config):
-                    if "__end__" in chunk:
-                        # Final response with follow-up suggestions
-                        final_state = chunk["__end__"]
-                        
-                        # Send follow-up suggestions if available
-                        if final_state.follow_up_questions:
-                            yield self._format_sse({
-                                "type": "follow_up_suggestions",
-                                "content": final_state.follow_up_questions,
-                                "title": "What would you like to explore next?"
-                            })
-
-        except Exception as e:
-            logger.error(f"Enhanced analysis error: {e}")
-            # Fallback to regular analysis
-            async for chunk in self._stream_patient_analysis(message, session_id):
-                yield chunk
-
-    async def _add_follow_up_suggestions(self, session_id: str):
-        """Add intelligent follow-up suggestions after analysis"""
-        try:
-            # Get the latest analysis result
-            context = self.patient_context.get(session_id)
-            if not context:
-                return
-
-            patient_data = context.get('patient_data', {})
-            result = context.get('result')
-
-            if result:
-                # Generate follow-up questions
-                follow_ups = self.follow_up_generator.generate_clinical_questions(result, patient_data)
-                
-                if follow_ups:
-                    # Store in enhanced context
-                    enhanced_context = self._get_enhanced_context(session_id)
-                    enhanced_context.follow_up_suggestions = follow_ups
-
-        except Exception as e:
-            logger.error(f"Error generating follow-up suggestions: {e}")
-
-    def get_follow_up_suggestions(self, session_id: str) -> List[str]:
-        """Get current follow-up suggestions for a session"""
-        if not self.enable_enhanced_features:
-            return []
-        
-        enhanced_context = self._get_enhanced_context(session_id)
-        return enhanced_context.follow_up_suggestions
-
-    def reset_conversation_thread(self, session_id: str) -> bool:
-        """Reset LangGraph conversation thread for enhanced features"""
-        try:
-            if session_id in self.enhanced_context:
-                # Reset the thread ID to start fresh
-                self.enhanced_context[session_id].active_thread_id = None
-                self.enhanced_context[session_id].follow_up_suggestions = []
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Error resetting conversation thread: {e}")
-            return False
-
-    async def get_conversation_insights(self, session_id: str) -> Dict[str, Any]:
-        """Get insights about the conversation for analytics"""
-        insights = {
-            "message_count": len(self._get_session(session_id)),
-            "has_patient_analysis": session_id in self.patient_context,
-            "enhanced_features_enabled": self.enable_enhanced_features,
-            "follow_up_suggestions_count": len(self.get_follow_up_suggestions(session_id)),
-            "last_activity": None
-        }
-
-        session = self._get_session(session_id)
-        if session:
-            insights["last_activity"] = session[-1].get("timestamp")
-
-        return insights
-
     def _format_sse(self, data: Dict) -> str:
         """Format data as Server-Sent Event"""
         return f"data: {json.dumps(data)}\n\n"
@@ -3070,5 +2712,3 @@ Example: "68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PS
             del self.sessions[session_id]
         if session_id in self.patient_context:
             del self.patient_context[session_id]
-        if session_id in self.enhanced_context:
-            del self.enhanced_context[session_id]

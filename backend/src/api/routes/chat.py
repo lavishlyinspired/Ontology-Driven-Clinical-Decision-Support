@@ -29,31 +29,42 @@ lca_service = LungCancerAssistantService(
     enable_advanced_workflow=True,
     enable_provenance=True
 )
-conversation_service = ConversationService(lca_service)
+
+# Initialize conversation service with enhanced features enabled
+conversation_service = ConversationService(lca_service, enable_enhanced_features=True)
 
 
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = "default"
+    use_enhanced_features: Optional[bool] = None  # Allow per-request control
+
+class FollowUpRequest(BaseModel):
+    session_id: str
+
+class ThreadResetRequest(BaseModel):
+    session_id: str
 
 
 @router.post("/stream")
 async def chat_stream(request: ChatRequest):
     """
-    Stream chat responses via Server-Sent Events
+    Stream chat responses via Server-Sent Events with enhanced features
     
     Args:
         message: User message
         session_id: Session identifier for conversation history
+        use_enhanced_features: Whether to use LangGraph enhanced features
         
     Returns:
-        SSE stream with chat responses
+        SSE stream with chat responses and potential follow-up suggestions
     """
     try:
         async def event_generator():
             async for chunk in conversation_service.chat_stream(
                 session_id=request.session_id,
-                message=request.message
+                message=request.message,
+                use_enhanced_features=request.use_enhanced_features
             ):
                 yield chunk
         
@@ -125,8 +136,83 @@ async def chat_health():
         "service": "chat",
         "features": [
             "streaming_responses",
-            "session_management",
+            "session_management", 
             "patient_data_extraction",
-            "workflow_integration"
-        ]
+            "workflow_integration",
+            "enhanced_langgraph_features",
+            "intelligent_followup_suggestions"
+        ],
+        "enhanced_features_available": conversation_service.enable_enhanced_features
     }
+
+
+# =============================================================================
+# Enhanced Conversation Endpoints
+# =============================================================================
+
+@router.get("/follow-up/{session_id}")
+async def get_follow_up_suggestions(session_id: str):
+    """
+    Get intelligent follow-up suggestions for a session
+    
+    Args:
+        session_id: Session identifier
+        
+    Returns:
+        List of follow-up question suggestions
+    """
+    try:
+        suggestions = conversation_service.get_follow_up_suggestions(session_id)
+        return {
+            "session_id": session_id,
+            "suggestions": suggestions,
+            "count": len(suggestions)
+        }
+    except Exception as e:
+        logger.error(f"Follow-up suggestions error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reset-thread")
+async def reset_conversation_thread(request: ThreadResetRequest):
+    """
+    Reset LangGraph conversation thread for enhanced features
+    
+    Args:
+        session_id: Session identifier
+        
+    Returns:
+        Reset confirmation
+    """
+    try:
+        success = conversation_service.reset_conversation_thread(request.session_id)
+        return {
+            "status": "success" if success else "not_found",
+            "session_id": request.session_id,
+            "message": "Conversation thread reset successfully" if success else "Session not found"
+        }
+    except Exception as e:
+        logger.error(f"Thread reset error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/insights/{session_id}")
+async def get_conversation_insights(session_id: str):
+    """
+    Get analytics and insights about a conversation session
+    
+    Args:
+        session_id: Session identifier
+        
+    Returns:
+        Conversation insights and analytics
+    """
+    try:
+        insights = await conversation_service.get_conversation_insights(session_id)
+        return {
+            "session_id": session_id,
+            "insights": insights
+        }
+    except Exception as e:
+        logger.error(f"Conversation insights error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

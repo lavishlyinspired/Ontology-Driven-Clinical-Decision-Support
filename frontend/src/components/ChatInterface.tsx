@@ -844,21 +844,37 @@ Try describing a patient to get started!`,
                             Tool: {toolCall.name}
                           </span>
                         </div>
-                        {Object.keys(toolCall.input).length > 0 && (
+                        {toolCall.input && Object.keys(toolCall.input).length > 0 && (
                           <details className="text-xs text-gray-400 mb-2">
                             <summary className="cursor-pointer hover:text-gray-300">Input</summary>
                             <pre className="mt-2 p-2 bg-slate-900 rounded overflow-x-auto">
-                              {JSON.stringify(toolCall.input, null, 2)}
+                              {(() => {
+                                try {
+                                  return JSON.stringify(toolCall.input, null, 2)
+                                } catch (error) {
+                                  return `Error displaying input: ${error instanceof Error ? error.message : 'Unknown error'}`
+                                }
+                              })()}
                             </pre>
                           </details>
                         )}
-                        {toolCall.output && (
+                        {toolCall.output != null && (
                           <details className="text-xs text-gray-400" open>
                             <summary className="cursor-pointer hover:text-gray-300">Result</summary>
                             <pre className="mt-2 p-2 bg-slate-900 rounded overflow-x-auto text-green-400">
-                              {typeof toolCall.output === 'string'
-                                ? toolCall.output
-                                : JSON.stringify(toolCall.output, null, 2)}
+                              {(() => {
+                                try {
+                                  if (typeof toolCall.output === 'string') {
+                                    return toolCall.output
+                                  } else if (toolCall.output === null || toolCall.output === undefined) {
+                                    return 'null'
+                                  } else {
+                                    return JSON.stringify(toolCall.output, null, 2)
+                                  }
+                                } catch (error) {
+                                  return `Error displaying result: ${error instanceof Error ? error.message : 'Unknown error'}`
+                                }
+                              })()}
                             </pre>
                           </details>
                         )}
