@@ -26,12 +26,12 @@ use_vector_store = os.getenv("CHAT_USE_VECTOR_STORE", "true").lower() == "true"
 lca_service = LungCancerAssistantService(
     use_neo4j=use_neo4j,
     use_vector_store=use_vector_store,
-    enable_advanced_workflow=True,
-    enable_provenance=True
+    enable_advanced_workflow=False,  # Temporarily disabled for stability
+    enable_provenance=False  # Temporarily disabled for stability
 )
 
-# Initialize conversation service with enhanced features enabled
-conversation_service = ConversationService(lca_service, enable_enhanced_features=True)
+# Initialize conversation service with enhanced features disabled for stability
+conversation_service = ConversationService(lca_service, enable_enhanced_features=False)
 
 
 class ChatRequest(BaseModel):

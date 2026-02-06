@@ -361,16 +361,14 @@ Try describing a patient to get started!`,
     try {
       // Stream response via SSE from backend
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/chat-graph/stream`, {
+      const response = await fetch(`${apiUrl}/api/v1/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           message: messageText,
-          session_id: sessionId,
-          include_graph: true,
-          auto_expand_entities: true
+          session_id: sessionId
         })
       })
 

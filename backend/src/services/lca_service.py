@@ -107,10 +107,14 @@ class LungCancerAssistantService:
         self.rule_engine = GuidelineRuleEngine(self.ontology)
         logger.info(f"✓ Loaded {len(self.rule_engine.rules)} guideline rules")
         
-        # Debug: Log first few rules for verification
+        # Debug: Log first few rules for verification and check R8A specifically
         if self.rule_engine.rules:
-            # logger.info(f"Sample rules loaded: {[r.rule_id for r in self.rule_engine.rules[:3]]}")
-            logger.info(f"Sample rules loaded: ")
+            rule_ids = list(self.rule_engine.rules.keys())
+            logger.info(f"Sample rules loaded: {rule_ids[:5]}")
+            if "R8A" in self.rule_engine.rules:
+                logger.info("✓ R8A (EGFR TKI adjuvant for Stage IIIA) is loaded")
+            if "R6" in self.rule_engine.rules:
+                logger.info("✓ R6 (Chemoradio for Stage IIIA/B) is loaded")
         else:
             logger.error("⚠️ No guideline rules loaded - this will prevent recommendations!")
 
@@ -331,7 +335,7 @@ class LungCancerAssistantService:
         if not ontology_recommendations:
             logger.warning("⚠️ Rule engine generated zero recommendations for patient data:")
             logger.warning(f"   Patient data: {normalized_patient_data}")
-            logger.warning(f"   Available rules: {[r.rule_id for r in self.rule_engine.rules[:5]]}")
+            logger.warning(f"   Available rules: {list(self.rule_engine.rules.keys())[:5]}")
             logger.warning("   This will result in empty recommendations - check rule matching logic")
         
         if ontology_recommendations:

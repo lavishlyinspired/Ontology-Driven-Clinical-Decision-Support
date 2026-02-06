@@ -308,7 +308,10 @@ class ConversationService:
                     yield chunk
                 return
 
-            if intent == "patient_analysis":
+            if intent == "patient_lookup":
+                async for chunk in self._stream_patient_lookup(message, session_id):
+                    yield chunk
+            elif intent == "patient_analysis":
                 async for chunk in self._stream_patient_analysis(message, session_id):
                     yield chunk
                 
@@ -344,8 +347,21 @@ class ConversationService:
         Classify user intent considering conversation context
 
         Returns:
-            "patient_analysis", "follow_up", "mcp_tool", "mcp_app", "clustering_analysis", or "general_qa"
+            "patient_lookup", "patient_analysis", "follow_up", "mcp_tool", "mcp_app", "clustering_analysis", or "general_qa"
         """
+        # Check for patient ID lookup patterns
+        patient_id_patterns = [
+            r'patient\s+id[:\s]+([A-Z0-9_]+)',
+            r'\b(CHAT_\d{8}_\d{6})\b',
+            r'\b(PAT_[A-Z0-9]+)\b',
+            r'lookup\s+([A-Z0-9_]+)',
+            r'find\s+patient\s+([A-Z0-9_]+)',
+            r'retrieve\s+([A-Z0-9_]+)'
+        ]
+        for pattern in patient_id_patterns:
+            if re.search(pattern, message, re.IGNORECASE):
+                return "patient_lookup"
+        
         # Check for MCP App invocation patterns
         mcp_app_patterns = [
             r'compare\s+treatment',
@@ -428,103 +444,263 @@ class ConversationService:
 
         return "general_qa"
 
+    async def _stream_patient_lookup(self, message: str, session_id: str = None) -> AsyncIterator[str]:
+        """Stream patient lookup by ID from Neo4j"""
+        
+        # Extract patient ID from message
+        patient_id_patterns = [
+            r'patient\s+id[:\s]+([A-Z0-9_]+)',
+            r'\b(CHAT_\d{8}_\d{6})\b',
+            r'\b(PAT_[A-Z0-9]+)\b',
+            r'lookup\s+([A-Z0-9_]+)',
+            r'find\s+patient\s+([A-Z0-9_]+)',
+            r'retrieve\s+([A-Z0-9_]+)'
+        ]
+        
+        patient_id = None
+        for pattern in patient_id_patterns:
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                patient_id = match.group(1)
+                break
+        
+        if not patient_id:
+            yield self._format_sse({
+                "type": "error",
+                "content": "Could not extract patient ID from your message. Please provide a valid patient ID (e.g., CHAT_20260201_142225)"
+            })
+            return
+        
+        yield self._format_sse({
+            "type": "status",
+            "content": f"Looking up patient {patient_id} in database..."
+        })
+        
+        # Check if Neo4j is available
+        if not self.lca_service.graph_db or not self.lca_service.graph_db.driver:
+            yield self._format_sse({
+                "type": "error",
+                "content": "Database connection not available. Cannot lookup patient records."
+            })
+            return
+        
+        try:
+            # Query Neo4j for patient
+            from ..db.neo4j_client import Neo4jGraphClient
+            
+            query = """
+            MATCH (p:Patient {patient_id: $patient_id})
+            OPTIONAL MATCH (p)-[:HAS_DIAGNOSIS]->(d:Diagnosis)
+            OPTIONAL MATCH (p)-[:HAS_BIOMARKER]->(b:Biomarker)
+            OPTIONAL MATCH (p)-[:RECEIVED_RECOMMENDATION]->(r:TreatmentRecommendation)
+            RETURN p, 
+                   collect(DISTINCT d) as diagnoses,
+                   collect(DISTINCT b) as biomarkers,
+                   collect(DISTINCT r) as recommendations
+            """
+            
+            with self.lca_service.graph_db.driver.session() as session:
+                result = session.run(query, patient_id=patient_id)
+                record = result.single()
+                
+                if not record:
+                    yield self._format_sse({
+                        "type": "error",
+                        "content": f"Patient {patient_id} not found in database. This patient may not have been processed yet or the ID is incorrect."
+                    })
+                    return
+                
+                # Extract patient data
+                patient_node = record['p']
+                patient_data = dict(patient_node)
+                
+                yield self._format_sse({
+                    "type": "status",
+                    "content": "Patient found! Retrieving details..."
+                })
+                
+                # Stream patient data
+                yield self._format_sse({
+                    "type": "patient_data",
+                    "content": patient_data
+                })
+                
+                # Format patient summary
+                age = patient_data.get('age', 'Unknown')
+                sex = patient_data.get('sex', 'Unknown')
+                stage = patient_data.get('tnm_stage', 'Unknown')
+                histology = patient_data.get('histology_type', 'Unknown')
+                
+                summary = f"""## Patient Summary: {patient_id}
+
+**Demographics:**
+- Age: {age}
+- Sex: {sex}
+
+**Diagnosis:**
+- Stage: {stage}
+- Histology: {histology}
+- Performance Status: {patient_data.get('performance_status', 'Not specified')}
+"""
+                
+                # Add biomarker info if available
+                biomarkers = patient_data.get('biomarker_profile', {})
+                if biomarkers:
+                    summary += "\n**Biomarkers:**\n"
+                    for marker, value in biomarkers.items():
+                        summary += f"- {marker}: {value}\n"
+                
+                yield self._format_sse({
+                    "type": "text",
+                    "content": summary
+                })
+                
+                # Get recommendations if available
+                recommendations = record.get('recommendations', [])
+                if recommendations:
+                    recs_text = "\n## Previous Recommendations\n\n"
+                    for i, rec in enumerate(recommendations, 1):
+                        rec_dict = dict(rec)
+                        recs_text += f"{i}. **{rec_dict.get('treatment_type', 'Unknown')}**\n"
+                        recs_text += f"   - Evidence: {rec_dict.get('evidence_level', 'N/A')}\n"
+                        recs_text += f"   - Intent: {rec_dict.get('treatment_intent', 'N/A')}\n"
+                        if rec_dict.get('survival_benefit'):
+                            recs_text += f"   - Survival Benefit: {rec_dict.get('survival_benefit')}\n"
+                        recs_text += "\n"
+                    
+                    yield self._format_sse({
+                        "type": "recommendation",
+                        "content": recs_text
+                    })
+                else:
+                    yield self._format_sse({
+                        "type": "text",
+                        "content": "\n*No treatment recommendations found for this patient.*\n"
+                    })
+                
+                # Store in session context for follow-ups
+                if session_id:
+                    self.patient_context[session_id] = {
+                        "patient_data": patient_data,
+                        "patient_id": patient_id
+                    }
+                
+                # Suggest follow-up actions
+                suggestions = [
+                    f"Update treatment plan for {patient_id}",
+                    f"Find similar patients to {patient_id}",
+                    "Get alternative treatment options"
+                ]
+                
+                yield self._format_sse({
+                    "type": "suggestions",
+                    "content": suggestions
+                })
+                
+        except Exception as e:
+            logger.error(f"Patient lookup error: {e}", exc_info=True)
+            yield self._format_sse({
+                "type": "error",
+                "content": f"Error retrieving patient data: {str(e)}"
+            })
+
     async def _stream_patient_analysis(self, message: str, session_id: str = None) -> AsyncIterator[str]:
         """Stream patient analysis workflow with enhanced visibility"""
 
-        # Step 1: Extract patient data with detailed progress
-        yield self._format_sse({
-            "type": "status",
-            "content": "Extracting patient data from your message..."
-        })
-
-        patient_data = self._extract_patient_data(message)
-
-        # Debug log the extracted data
-        logger.info(f"[DEBUG] Extracted patient data: {patient_data}")
-
-        if not patient_data:
-            yield self._format_sse({
-                "type": "error",
-                "content": "Could not extract patient data. Please provide: age, sex, stage, histology type."
-            })
-            return
-
-        # Check extraction metadata for incomplete extraction
-        extraction_meta = patient_data.pop("_extraction_meta", {})
-        missing_fields = extraction_meta.get("missing_fields", [])
-        extracted_fields = extraction_meta.get("extracted_fields", [])
-
-        # Debug log the extraction metadata
-        logger.info(f"[DEBUG] Missing fields: {missing_fields}")
-        logger.info(f"[DEBUG] Extracted fields: {extracted_fields}")
-
-        if missing_fields:
-            # Stream what was extracted
-            yield self._format_sse({
-                "type": "reasoning",
-                "content": f"📋 **Partial Extraction:** Found {', '.join(extracted_fields) if extracted_fields else 'no required fields'}"
-            })
-
-            # Show what we extracted so far
-            if extracted_fields:
-                yield self._format_sse({
-                    "type": "patient_data",
-                    "content": {k: v for k, v in patient_data.items() if not k.startswith("_")}
-                })
-
-            # Provide helpful error about missing fields
-            missing_hints = {
-                "age": "age (e.g., '68 year old' or '68M')",
-                "sex": "sex (e.g., 'male', 'female', 'M', or 'F')",
-                "tnm_stage": "stage (e.g., 'stage IIIA', 'stage IV', 'limited stage', 'extensive stage')",
-                "histology_type": "histology type (e.g., 'adenocarcinoma', 'squamous cell', 'SCLC', 'NSCLC')"
-            }
-            hints = [missing_hints.get(f, f) for f in missing_fields]
-
-            yield self._format_sse({
-                "type": "error",
-                "content": f"⚠️ Missing required fields: {', '.join(hints)}\n\nPlease include these details to get treatment recommendations."
-            })
-            return
-
-        # Stream reasoning about what was extracted
-        yield self._format_sse({
-            "type": "reasoning",
-            "content": f"✅ **Extraction Complete:** Successfully extracted {len(extracted_fields)} required fields"
-        })
-
-        yield self._format_sse({
-            "type": "patient_data",
-            "content": patient_data
-        })
-
-        # Step 1b: Check if patient exists in Neo4j
-        if self.lca_service.graph_db and self.lca_service.graph_db.driver:
+        try:
+            # Step 1: Extract patient data with detailed progress
             yield self._format_sse({
                 "type": "status",
-                "content": "Checking existing patient records in Neo4j..."
+                "content": "Extracting patient data from your message..."
             })
 
-            existing = self._find_existing_patient(patient_data)
-            if existing:
+            patient_data = self._extract_patient_data(message)
+
+            # Debug log the extracted data
+            logger.info(f"[DEBUG] Extracted patient data: {patient_data}")
+
+            if not patient_data:
                 yield self._format_sse({
-                    "type": "progress",
-                    "content": f"Found existing patient record: {existing.get('patient_id', 'unknown')}"
+                    "type": "error",
+                    "content": "Could not extract patient data. Please provide: age, sex, stage, histology type."
                 })
-                patient_data["patient_id"] = existing.get("patient_id", patient_data["patient_id"])
-            else:
+                return
+
+            # Check extraction metadata for incomplete extraction
+            extraction_meta = patient_data.pop("_extraction_meta", {})
+            missing_fields = extraction_meta.get("missing_fields", [])
+            extracted_fields = extraction_meta.get("extracted_fields", [])
+
+            # Debug log the extraction metadata
+            logger.info(f"[DEBUG] Missing fields: {missing_fields}")
+            logger.info(f"[DEBUG] Extracted fields: {extracted_fields}")
+
+            if missing_fields:
+                # Stream what was extracted
                 yield self._format_sse({
-                    "type": "progress",
-                    "content": "No existing record found - creating new patient entry"
+                    "type": "reasoning",
+                    "content": f"📋 **Partial Extraction:** Found {', '.join(extracted_fields) if extracted_fields else 'no required fields'}"
                 })
 
-        # Step 2: Assess complexity with reasoning
-        yield self._format_sse({
-            "type": "status",
-            "content": "Assessing case complexity..."
-        })
+                # Show what we extracted so far
+                if extracted_fields:
+                    yield self._format_sse({
+                        "type": "patient_data",
+                        "content": {k: v for k, v in patient_data.items() if not k.startswith("_")}
+                    })
 
-        try:
+                # Provide helpful error about missing fields
+                missing_hints = {
+                    "age": "age (e.g., '68 year old' or '68M')",
+                    "sex": "sex (e.g., 'male', 'female', 'M', or 'F')",
+                    "tnm_stage": "stage (e.g., 'stage IIIA', 'stage IV', 'limited stage', 'extensive stage')",
+                    "histology_type": "histology type (e.g., 'adenocarcinoma', 'squamous cell', 'SCLC', 'NSCLC')"
+                }
+                hints = [missing_hints.get(f, f) for f in missing_fields]
+
+                yield self._format_sse({
+                    "type": "error",
+                    "content": f"⚠️ Missing required fields: {', '.join(hints)}\n\nPlease include these details to get treatment recommendations."
+                })
+                return
+
+            # Stream reasoning about what was extracted
+            yield self._format_sse({
+                "type": "reasoning",
+                "content": f"✅ **Extraction Complete:** Successfully extracted {len(extracted_fields)} required fields"
+            })
+
+            yield self._format_sse({
+                "type": "patient_data",
+                "content": patient_data
+            })
+
+            # Step 1b: Check if patient exists in Neo4j
+            if self.lca_service.graph_db and self.lca_service.graph_db.driver:
+                yield self._format_sse({
+                    "type": "status",
+                    "content": "Checking existing patient records in Neo4j..."
+                })
+
+                existing = self._find_existing_patient(patient_data)
+                if existing:
+                    yield self._format_sse({
+                        "type": "progress",
+                        "content": f"Found existing patient record: {existing.get('patient_id', 'unknown')}"
+                    })
+                    patient_data["patient_id"] = existing.get("patient_id", patient_data["patient_id"])
+                else:
+                    yield self._format_sse({
+                        "type": "progress",
+                        "content": "No existing record found - creating new patient entry"
+                    })
+
+            # Step 2: Assess complexity with reasoning
+            yield self._format_sse({
+                "type": "status",
+                "content": "Assessing case complexity..."
+            })
+
             complexity = await self.lca_service.assess_complexity(patient_data)
 
             # Stream reasoning about complexity assessment
@@ -598,11 +774,13 @@ class ConversationService:
             log_handler.install(log_queue)
 
             try:
-                # Execute with streaming updates and AI workflow enabled
+                # Execute with streaming updates
+                # Set use_ai_workflow=False for faster response (2-3s vs 20-30s)
+                # The AI workflow adds argumentation but is not required for recommendations
                 processing_task = asyncio.create_task(
                     self.lca_service.process_patient(
                         patient_data=patient_data,
-                        use_ai_workflow=True,
+                        use_ai_workflow=False,  # Changed from True to False for faster responses
                         force_advanced=use_advanced,
                         progress_callback=stream_progress
                     )

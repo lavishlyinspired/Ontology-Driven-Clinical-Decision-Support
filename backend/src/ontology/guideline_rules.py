@@ -575,11 +575,13 @@ class GuidelineRuleEngine:
             "SquamousCellCarcinoma",
             "LargeCellCarcinoma"
         ]
-        return any(h in histology for h in nsclc_types)
+        # Make case-insensitive comparison
+        histology_lower = histology.lower()
+        return any(h.lower() in histology_lower for h in nsclc_types)
 
     def _is_sclc(self, histology: str) -> bool:
         """Check if histology is SCLC type"""
-        return "SmallCell" in histology
+        return "smallcell" in histology.lower()
 
     def _calculate_priority(self, rule: GuidelineRule, stage: str, ps: int) -> int:
         """
