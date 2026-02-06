@@ -1,0 +1,12 @@
+name,stage,histology,ps,age,scenario,confidence,num_recommendations,guidelines,mapping_confidence
+Jenny_Sesen,IIA,Carcinosarcoma,1,72,early_stage_operable,0.9,2,"['NICE NG122 1.4.9', 'NICE NG122 1.4.1']",0.96
+John_Smith,IB,Adenocarcinoma,0,65,early_stage_operable,0.9,2,"['NICE NG122 1.4.9', 'NICE NG122 1.4.1']",0.96
+Mary_Williams,IIIA,SquamousCellCarcinoma,1,58,locally_advanced_resectable,0.85,2,"['NICE NG122 1.4.21', 'NICE NG122 1.4.18']",0.96
+Robert_Johnson,IV,Adenocarcinoma,1,68,metastatic_good_ps,0.9,3,"['NICE TA683', 'NICE TA654 (EGFR), TA670 (ALK)', 'NICE TA531']",0.96
+Susan_Davis,IIIA,SmallCellCarcinoma,1,62,sclc_limited,0.95,2,"['NICE NG122 1.6.3', 'NICE NG122 1.6.1']",0.96
+William_Brown,IV,LargeCellCarcinoma,3,78,metastatic_poor_ps,0.9,2,"['NICE NG122 1.5.1', 'NICE NG122 1.5.3']",0.96
+Elizabeth_Miller,IV,Adenocarcinoma,0,55,metastatic_good_ps,0.9,3,"['NICE TA683', 'NICE TA654 (EGFR), TA670 (ALK)', 'NICE TA531']",0.96
+James_Wilson,IIIB,Adenocarcinoma,1,48,locally_advanced_unresectable,0.9,2,"['NICE NG122 1.4.20', 'NICE NG122 1.4.18 + TA798']",0.96
+Patricia_Anderson,IV,Adenocarcinoma,1,42,metastatic_good_ps,0.9,3,"['NICE TA683', 'NICE TA654 (EGFR), TA670 (ALK)', 'NICE TA531']",0.96
+Thomas_Taylor,IIB,SquamousCellCarcinoma,2,70,early_stage_inoperable,0.85,2,"['NICE NG122 1.4.9', 'NICE NG122 1.4.12']",0.96
+Jennifer_Martinez,IV,SmallCellCarcinoma,1,45,sclc_extensive,0.95,2,"['NICE NG122 1.6.5', 'NICE TA638']",0.96
