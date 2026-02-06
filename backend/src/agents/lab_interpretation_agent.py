@@ -29,7 +29,7 @@ from ..services.loinc_service import LOINCService, get_loinc_service, LabInterpr
 class LabInterpretationResult:
     """Result of lab interpretation analysis"""
     patient_id: str
-    interpretations: List[LabInterpretation]
+    interpretations: List[Dict[str, Any]]  # Changed from LabInterpretation to Dict
     critical_values: List[Dict[str, Any]]
     recommendations: List[str]
     requires_action: bool
@@ -131,24 +131,24 @@ class LabInterpretationAgent:
                 interpretations.append(interpretation)
 
                 # Flag critical values
-                if interpretation.interpretation in ['critical_low', 'critical_high']:
+                if interpretation.get('interpretation') in ['critical_low', 'critical_high']:
                     critical_values.append({
-                        'loinc_code': interpretation.loinc_code,
-                        'value': interpretation.value,
-                        'unit': interpretation.unit,
-                        'interpretation': interpretation.interpretation,
+                        'loinc_code': interpretation.get('loinc_code'),
+                        'value': interpretation.get('value'),
+                        'unit': interpretation.get('unit'),
+                        'interpretation': interpretation.get('interpretation'),
                         'severity': 'critical',
                         'date': lab.get('date', datetime.now().isoformat())
                     })
-                elif interpretation.interpretation in ['high', 'low']:
+                elif interpretation.get('interpretation') in ['high', 'low']:
                     # Check if it's treatment-related toxicity (Grade 2+)
                     severity = self._assess_toxicity_grade(interpretation)
                     if severity and severity >= 2:
                         critical_values.append({
-                            'loinc_code': interpretation.loinc_code,
-                            'value': interpretation.value,
-                            'unit': interpretation.unit,
-                            'interpretation': interpretation.interpretation,
+                            'loinc_code': interpretation.get('loinc_code'),
+                            'value': interpretation.get('value'),
+                            'unit': interpretation.get('unit'),
+                            'interpretation': interpretation.get('interpretation'),
                             'severity': f'grade{severity}',
                             'date': lab.get('date', datetime.now().isoformat())
                         })
@@ -216,75 +216,77 @@ class LabInterpretationAgent:
 
         return lab_results or labs or []
 
-    def _assess_toxicity_grade(self, interpretation: LabInterpretation) -> Optional[int]:
+    def _assess_toxicity_grade(self, interpretation: Dict) -> Optional[int]:
         """
         Assess CTCAE toxicity grade based on lab value.
 
         Returns:
             1-5 toxicity grade, or None if not applicable
         """
-        loinc = interpretation.loinc_code
+        loinc = interpretation.get('loinc_code')
+        value = interpretation.get('value')
+        ref_range = interpretation.get('reference_range', {})
 
         # Hematologic toxicity (CTCAE 5.0)
         if loinc == "718-7":  # Hemoglobin
-            if interpretation.value < 8.0:
+            if value < 8.0:
                 return 3  # Grade 3: Hgb < 8.0 g/dL
-            elif interpretation.value < 10.0:
+            elif value < 10.0:
                 return 2  # Grade 2: Hgb < 10.0 g/dL
-            elif interpretation.value < interpretation.reference_range.get('low', 12.0):
+            elif value < ref_range.get('low', 12.0):
                 return 1
 
         elif loinc == "777-3":  # Platelets
-            if interpretation.value < 25:
+            if value < 25:
                 return 4  # Grade 4: < 25 x10^9/L
-            elif interpretation.value < 50:
+            elif value < 50:
                 return 3  # Grade 3: < 50 x10^9/L
-            elif interpretation.value < 75:
+            elif value < 75:
                 return 2  # Grade 2: < 75 x10^9/L
-            elif interpretation.value < 100:
+            elif value < 100:
                 return 1
 
         elif loinc == "6690-2":  # WBC
-            if interpretation.value < 1.0:
+            if value < 1.0:
                 return 4  # Grade 4: < 1.0 x10^9/L
-            elif interpretation.value < 2.0:
+            elif value < 2.0:
                 return 3  # Grade 3: < 2.0 x10^9/L
-            elif interpretation.value < 3.0:
+            elif value < 3.0:
                 return 2
 
         elif loinc == "751-8":  # ANC
-            if interpretation.value < 0.5:
+            if value < 0.5:
                 return 4  # Grade 4: < 0.5 x10^9/L
-            elif interpretation.value < 1.0:
+            elif value < 1.0:
                 return 3  # Grade 3: < 1.0 x10^9/L
-            elif interpretation.value < 1.5:
+            elif value < 1.5:
                 return 2
 
         # Hepatic toxicity
         elif loinc in ["1742-6", "1920-8"]:  # ALT, AST
-            uln = interpretation.reference_range.get('high', 40)
-            if interpretation.value > 20 * uln:
+            uln = ref_range.get('high', 40)
+            if value > 20 * uln:
                 return 4  # Grade 4: > 20x ULN
-            elif interpretation.value > 5 * uln:
+            elif value > 5 * uln:
                 return 3  # Grade 3: > 5x ULN
-            elif interpretation.value > 3 * uln:
+            elif value > 3 * uln:
                 return 2  # Grade 2: > 3x ULN
-            elif interpretation.value > uln:
+            elif value > uln:
                 return 1
 
         # Renal toxicity
         elif loinc == "2160-0":  # Creatinine
-            baseline = interpretation.reference_range.get('baseline', 1.0)
-            if interpretation.value > 3 * baseline:
+            baseline = ref_range.get('baseline', 1.0)
+            if value > 3 * baseline:
                 return 3  # Grade 3: > 3x baseline
-            elif interpretation.value > 1.5 * baseline:
+            elif value > 1.5 * baseline:
                 return 2
 
         return None
 
     def _generate_recommendations(
         self,
-        interpretations: List[LabInterpretation],
+        interpretations: List[Dict],  # Changed from LabInterpretation to Dict
         critical_values: List[Dict],
         patient,
         treatment_context: Optional[Dict]
@@ -320,8 +322,8 @@ class LabInterpretationAgent:
             # EGFR TKI specific monitoring
             if 'osimertinib' in current_treatment.lower() or 'erlotinib' in current_treatment.lower():
                 # Check for hepatotoxicity
-                alt_results = [i for i in interpretations if i.loinc_code == "1742-6"]
-                if alt_results and alt_results[0].interpretation in ['high', 'critical_high']:
+                alt_results = [i for i in interpretations if i.get('loinc_code') == "1742-6"]
+                if alt_results and alt_results[0].get('interpretation') in ['high', 'critical_high']:
                     recommendations.append(
                         "Consider dose hold for EGFR TKI-related hepatotoxicity. "
                         "Resume at reduced dose when ALT < 3x ULN."
@@ -330,8 +332,8 @@ class LabInterpretationAgent:
             # Immunotherapy specific monitoring
             if 'pembrolizumab' in current_treatment.lower() or 'nivolumab' in current_treatment.lower():
                 # Check for immune-related AEs
-                tsh_results = [i for i in interpretations if i.loinc_code == "3016-3"]
-                if tsh_results and tsh_results[0].interpretation in ['high', 'low']:
+                tsh_results = [i for i in interpretations if i.get('loinc_code') == "3016-3"]
+                if tsh_results and tsh_results[0].get('interpretation') in ['high', 'low']:
                     recommendations.append(
                         "Possible immune-related thyroid dysfunction. "
                         "Consider endocrine consultation and corticosteroids if symptomatic."
@@ -340,15 +342,15 @@ class LabInterpretationAgent:
             # Chemotherapy specific monitoring
             if 'carboplatin' in current_treatment.lower() or 'cisplatin' in current_treatment.lower():
                 # Check for bone marrow suppression
-                plt_results = [i for i in interpretations if i.loinc_code == "777-3"]
-                if plt_results and plt_results[0].value < 100:
+                plt_results = [i for i in interpretations if i.get('loinc_code') == "777-3"]
+                if plt_results and plt_results[0].get('value') < 100:
                     recommendations.append(
                         "Thrombocytopenia detected. Consider dose reduction or growth factor support."
                     )
 
         # Add standard LOINC recommendations
         for interp in interpretations:
-            recommendations.extend(interp.recommendations)
+            recommendations.extend(interp.get('recommendations', []))
 
         return list(set(recommendations))  # Remove duplicates
 
@@ -370,7 +372,7 @@ class LabInterpretationAgent:
 
     def _assess_dose_adjustments(
         self,
-        interpretations: List[LabInterpretation],
+        interpretations: List[Dict],  # Changed from LabInterpretation to Dict
         treatment_context: Optional[Dict]
     ) -> List[Dict[str, Any]]:
         """Assess if dose adjustments are needed based on labs"""
@@ -383,25 +385,25 @@ class LabInterpretationAgent:
 
         # Carboplatin dose adjustment based on CrCl
         if 'carboplatin' in current_treatment.lower():
-            crcl_results = [i for i in interpretations if 'creatinine clearance' in i.loinc_code]
-            if crcl_results and crcl_results[0].value < 60:
+            crcl_results = [i for i in interpretations if 'creatinine clearance' in i.get('loinc_code', '')]
+            if crcl_results and crcl_results[0].get('value') < 60:
                 adjustments.append({
                     'drug': 'Carboplatin',
                     'current_dose': 'AUC 6',
                     'recommended_dose': 'AUC 5',
-                    'rationale': f'CrCl {crcl_results[0].value} mL/min < 60',
+                    'rationale': f'CrCl {crcl_results[0].get("value")} mL/min < 60',
                     'evidence': 'Grade A - Calvert formula adjustment'
                 })
 
         # Pemetrexed contraindication
         if 'pemetrexed' in current_treatment.lower():
-            crcl_results = [i for i in interpretations if 'creatinine clearance' in i.loinc_code]
-            if crcl_results and crcl_results[0].value < 45:
+            crcl_results = [i for i in interpretations if 'creatinine clearance' in i.get('loinc_code', '')]
+            if crcl_results and crcl_results[0].get('value') < 45:
                 adjustments.append({
                     'drug': 'Pemetrexed',
                     'current_dose': 'Standard',
                     'recommended_dose': 'CONTRAINDICATED',
-                    'rationale': f'CrCl {crcl_results[0].value} mL/min < 45',
+                    'rationale': f'CrCl {crcl_results[0].get("value")} mL/min < 45',
                     'evidence': 'Grade A - FDA contraindication'
                 })
 
@@ -442,7 +444,7 @@ class LabInterpretationAgent:
 
     def _generate_clinical_summary(
         self,
-        interpretations: List[LabInterpretation],
+        interpretations: List[Dict],  # Changed from LabInterpretation to Dict
         critical_values: List[Dict],
         recommendations: List[str]
     ) -> str:
@@ -453,7 +455,7 @@ class LabInterpretationAgent:
             return "No laboratory results available for interpretation."
 
         # Count abnormalities
-        normal_count = sum(1 for i in interpretations if i.interpretation == 'normal')
+        normal_count = sum(1 for i in interpretations if i.get('interpretation') == 'normal')
         abnormal_count = len(interpretations) - normal_count
 
         summary_parts.append(
@@ -473,14 +475,14 @@ class LabInterpretationAgent:
 
         return " ".join(summary_parts)
 
-    def _calculate_confidence(self, interpretations: List[LabInterpretation]) -> float:
+    def _calculate_confidence(self, interpretations: List[Dict]) -> float:
         """Calculate confidence in interpretation"""
         if not interpretations:
             return 1.0
 
         # Confidence based on number of interpretations with known reference ranges
         interpretations_with_ranges = sum(
-            1 for i in interpretations if i.reference_range
+            1 for i in interpretations if i.get('reference_range')
         )
 
         confidence = interpretations_with_ranges / len(interpretations)
@@ -527,14 +529,14 @@ class LabInterpretationAgent:
                 unit=lab.get('units', '')
             )
 
-            if interpretation.interpretation in ['critical_low', 'critical_high']:
+            if interpretation.get('interpretation') in ['critical_low', 'critical_high']:
                 critical.append({
-                    'loinc_code': interpretation.loinc_code,
-                    'value': interpretation.value,
-                    'unit': interpretation.unit,
-                    'interpretation': interpretation.interpretation,
+                    'loinc_code': interpretation.get('loinc_code'),
+                    'value': interpretation.get('value'),
+                    'unit': interpretation.get('unit'),
+                    'interpretation': interpretation.get('interpretation'),
                     'severity': 'critical',
-                    'clinical_significance': interpretation.clinical_significance
+                    'clinical_significance': interpretation.get('clinical_significance')
                 })
 
         return critical
