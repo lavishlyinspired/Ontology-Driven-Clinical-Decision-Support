@@ -3124,55 +3124,41 @@ Example: "68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PS
     # =============================================================================
 
     async def _stream_enhanced_analysis(self, message: str, session_id: str) -> AsyncIterator[str]:
-        """Enhanced patient analysis with LangGraph integration"""
-        if not self.enable_enhanced_features or not self.conversation_graph:
-            # Fallback to regular analysis
-            async for chunk in self._stream_patient_analysis(message, session_id):
-                yield chunk
-            return
+        """Enhanced patient analysis with LangGraph memory and follow-up suggestions.
 
+        Runs the standard analysis pipeline but wraps it with LangGraph conversation
+        memory and generates intelligent follow-up suggestions afterwards.
+        """
+        # Always run the full patient analysis pipeline first
+        async for chunk in self._stream_patient_analysis(message, session_id):
+            yield chunk
+
+        # After analysis completes, generate enhanced follow-up suggestions
         try:
-            # Use thread_id for LangGraph persistence
             context = self._get_enhanced_context(session_id)
             thread_id = context.active_thread_id or str(uuid.uuid4())
             context.active_thread_id = thread_id
 
-            # Configuration for LangGraph
-            config: RunnableConfig = {
-                "configurable": {
-                    "thread_id": thread_id,
+            # Store message in LangGraph memory for conversation continuity
+            if LANGGRAPH_AVAILABLE and self.checkpointer:
+                context.analysis_history.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "query": message,
                     "session_id": session_id
-                }
-            }
+                })
 
-            # Prepare initial state
-            if LANGGRAPH_AVAILABLE:
-                initial_state = EnhancedConversationState(
-                    messages=[HumanMessage(content=message)],
-                    context=context,
-                    session_id=session_id,
-                    thread_id=thread_id
-                )
+            # Generate follow-up suggestions from the analysis
+            await self._add_follow_up_suggestions(session_id)
 
-                # Stream the enhanced conversation
-                async for chunk in self.conversation_graph.astream(initial_state, config=config):
-                    if "__end__" in chunk:
-                        # Final response with follow-up suggestions
-                        final_state = chunk["__end__"]
-                        
-                        # Send follow-up suggestions if available
-                        if final_state.follow_up_questions:
-                            yield self._format_sse({
-                                "type": "follow_up_suggestions",
-                                "content": final_state.follow_up_questions,
-                                "title": "What would you like to explore next?"
-                            })
-
+            enhanced_context = self._get_enhanced_context(session_id)
+            if enhanced_context.follow_up_suggestions:
+                yield self._format_sse({
+                    "type": "follow_up_suggestions",
+                    "content": enhanced_context.follow_up_suggestions,
+                    "title": "What would you like to explore next?"
+                })
         except Exception as e:
-            logger.error(f"Enhanced analysis error: {e}")
-            # Fallback to regular analysis
-            async for chunk in self._stream_patient_analysis(message, session_id):
-                yield chunk
+            logger.warning(f"Enhanced follow-up generation failed (non-critical): {e}")
 
     async def _add_follow_up_suggestions(self, session_id: str):
         """Add intelligent follow-up suggestions after analysis"""
@@ -3186,9 +3172,29 @@ Example: "68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PS
             result = context.get('result')
 
             if result:
+                # Convert dataclass result to dict for follow-up generator
+                if hasattr(result, 'recommendations') and not isinstance(result, dict):
+                    from dataclasses import asdict
+                    try:
+                        analysis_dict = asdict(result)
+                    except Exception:
+                        # Fallback: build dict manually from recommendations
+                        analysis_dict = {
+                            "recommendations": [
+                                {
+                                    "treatment": getattr(r, 'treatment_type', getattr(r, 'treatment', '')),
+                                    "evidence_level": getattr(r, 'evidence_level', ''),
+                                    "treatment_intent": getattr(r, 'treatment_intent', ''),
+                                }
+                                for r in (result.recommendations or [])
+                            ]
+                        }
+                else:
+                    analysis_dict = result if isinstance(result, dict) else {}
+
                 # Generate follow-up questions
-                follow_ups = self.follow_up_generator.generate_clinical_questions(result, patient_data)
-                
+                follow_ups = self.follow_up_generator.generate_clinical_questions(analysis_dict, patient_data)
+
                 if follow_ups:
                     # Store in enhanced context
                     enhanced_context = self._get_enhanced_context(session_id)
