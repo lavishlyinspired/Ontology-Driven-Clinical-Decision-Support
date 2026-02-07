@@ -38,6 +38,9 @@ from .comorbidity_agent import ComorbidityAgent
 from .conflict_resolution_agent import ConflictResolutionAgent
 from .negotiation_protocol import NegotiationProtocol, NegotiationStrategy, AgentProposal
 from .explanation_agent import ExplanationAgent
+from .lab_interpretation_agent import LabInterpretationAgent
+from .medication_management_agent import MedicationManagementAgent
+from .monitoring_coordinator_agent import MonitoringCoordinatorAgent
 # Lazy import to avoid loading sentence_transformers/torch
 # from .persistence_agent import PersistenceAgent
 
@@ -95,6 +98,11 @@ class IntegratedLCAWorkflow:
         self.nsclc = NSCLCAgent()
         self.sclc = SCLCAgent()
         self.comorbidity = ComorbidityAgent()  # Always available
+        
+        # Lab/Medication/Monitoring agents (2025 - LOINC/RxNorm Integration)
+        self.lab_interpretation = LabInterpretationAgent()
+        self.medication_management = MedicationManagementAgent()
+        self.monitoring_coordinator = MonitoringCoordinatorAgent()
         
         # Lazy load PersistenceAgent to avoid loading sentence_transformers
         self.persistence = None
@@ -260,9 +268,10 @@ class IntegratedLCAWorkflow:
         await notify_progress("📊 Loading agent components...")
         
         # Log all available components
-        logger.info("🎯 AGENTS (11 total):")
+        logger.info("🎯 AGENTS (14+ total):")
         logger.info(f"   Core: IngestionAgent, SemanticMappingAgent, ClassificationAgent, ExplanationAgent")
         logger.info(f"   Specialized: BiomarkerAgent, ComorbidityAgent, NSCLCAgent, SCLCAgent")
+        logger.info(f"   Lab/Medication: LabInterpretationAgent, MedicationManagementAgent, MonitoringCoordinatorAgent")
         logger.info(f"   Advanced: ConflictResolutionAgent, UncertaintyQuantifier, PersistenceAgent")
         logger.info("")
         
@@ -295,7 +304,8 @@ class IntegratedLCAWorkflow:
             "IngestionAgent", "SemanticMappingAgent", "ClassificationAgent", 
             "BiomarkerAgent", "ComorbidityAgent", "ConflictResolutionAgent",
             "UncertaintyQuantifier", "ExplanationAgent", "PersistenceAgent",
-            "NSCLCAgent", "SCLCAgent"
+            "NSCLCAgent", "SCLCAgent",
+            "LabInterpretationAgent", "MedicationManagementAgent", "MonitoringCoordinatorAgent"
         }
         missing = all_possible_agents - set(agent_registry.keys())
         if missing:
@@ -790,6 +800,85 @@ class IntegratedLCAWorkflow:
                     logger.warning(f"[TemporalAnalyzer] Temporal analysis failed: {e}")
                     return None
             registry["TemporalAnalyzer"] = temporal_analysis_wrapper
+
+        # Add LabInterpretationAgent (LOINC integration)
+        async def lab_interpretation_wrapper(data):
+            patient_with_codes = data.get("SemanticMappingAgent_output", data)
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
+            
+            lab_results = patient_data.get("lab_results", [])
+            treatment_context = {
+                "current_treatment": patient_data.get("current_treatment"),
+                "regimen": patient_data.get("treatment_regimen")
+            }
+            
+            try:
+                result = self.lab_interpretation.execute(
+                    patient_with_codes, 
+                    lab_results=lab_results,
+                    treatment_context=treatment_context
+                )
+                logger.info(f"[LabInterpretationAgent] Interpreted {len(result.interpretations) if result else 0} lab results")
+                if result and result.critical_values:
+                    logger.warning(f"   ⚠ Critical values detected: {len(result.critical_values)}")
+                return result
+            except Exception as e:
+                logger.warning(f"[LabInterpretationAgent] Failed: {e}")
+                return None
+        registry["LabInterpretationAgent"] = lab_interpretation_wrapper
+
+        # Add MedicationManagementAgent (RxNorm integration)
+        async def medication_management_wrapper(data):
+            patient_with_codes = data.get("SemanticMappingAgent_output", data)
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
+            
+            medications = patient_data.get("medications", [])
+            proposed_treatment = patient_data.get("proposed_treatment")
+            
+            try:
+                result = self.medication_management.execute(
+                    patient_with_codes,
+                    medications=medications,
+                    proposed_treatment=proposed_treatment
+                )
+                logger.info(f"[MedicationManagementAgent] Safety score: {result.safety_score:.2f}" if result else "[MedicationManagementAgent] No result")
+                if result and result.drug_interactions:
+                    logger.warning(f"   ⚠ Drug interactions detected: {len(result.drug_interactions)}")
+                return result
+            except Exception as e:
+                logger.warning(f"[MedicationManagementAgent] Failed: {e}")
+                return None
+        registry["MedicationManagementAgent"] = medication_management_wrapper
+
+        # Add MonitoringCoordinatorAgent (Lab-Drug coordination)
+        async def monitoring_coordinator_wrapper(data):
+            patient_with_codes = data.get("SemanticMappingAgent_output", data)
+            if isinstance(patient_with_codes, dict):
+                patient_with_codes = _make_patient_with_codes(patient_with_codes)
+            
+            # Get lab and medication results from previous agents
+            lab_result = data.get("LabInterpretationAgent_output")
+            medication_result = data.get("MedicationManagementAgent_output")
+            
+            treatment_plan = patient_data.get("treatment_plan", {})
+            
+            try:
+                result = self.monitoring_coordinator.execute(
+                    patient_with_codes,
+                    lab_result=lab_result,
+                    medication_result=medication_result,
+                    treatment_plan=treatment_plan
+                )
+                logger.info(f"[MonitoringCoordinatorAgent] Protocol: {result.protocol_type if result else 'None'}")
+                if result and result.alerts:
+                    logger.warning(f"   ⚠ Monitoring alerts: {len(result.alerts)}")
+                return result
+            except Exception as e:
+                logger.warning(f"[MonitoringCoordinatorAgent] Failed: {e}")
+                return None
+        registry["MonitoringCoordinatorAgent"] = monitoring_coordinator_wrapper
 
         logger.info(f"[Registry] Final registry has {len(registry)} agents: {sorted(registry.keys())}")
         return registry

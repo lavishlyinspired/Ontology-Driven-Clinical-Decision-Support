@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { MessageSquare, X, Maximize2, Minimize2, ListTree, Activity, Shield, Network, GripVertical } from 'lucide-react'
 import ChatInterface from './ChatInterface'
 import { ActivityFeed } from './ActivityFeed'
@@ -142,8 +142,10 @@ export function FloatingChatButton() {
     setIsResizing(false)
   }
 
-  // Mouse event listeners
-  useCallback(() => {
+  // Mouse event listeners for dragging
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
     if (isDragging) {
       document.addEventListener('mousemove', handleDrag)
       document.addEventListener('mouseup', handleDragEnd)
@@ -155,9 +157,12 @@ export function FloatingChatButton() {
       document.removeEventListener('mousemove', handleDrag)
       document.removeEventListener('mouseup', handleDragEnd)
     }
-  }, [isDragging, handleDrag])()
+  }, [isDragging, handleDrag])
 
-  useCallback(() => {
+  // Mouse event listeners for resizing
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
     if (isResizing) {
       document.addEventListener('mousemove', handleResize)
       document.addEventListener('mouseup', handleResizeEnd)
@@ -169,7 +174,7 @@ export function FloatingChatButton() {
       document.removeEventListener('mousemove', handleResize)
       document.removeEventListener('mouseup', handleResizeEnd)
     }
-  }, [isResizing, handleResize])()
+  }, [isResizing, handleResize])
 
   if (!isOpen || isMinimized) {
     return (
@@ -310,14 +315,34 @@ export function FloatingChatButton() {
           {graphData && graphData.nodes.length > 0 ? (
             <SigmaGraph
               data={{
-                nodes: graphData.nodes.map(n => ({
-                  id: n.id,
-                  label: n.properties?.name as string || n.properties?.treatment as string || n.id.split(':').pop() || n.id,
-                  type: n.labels[0],
-                  properties: n.properties,
-                  color: undefined,
-                  size: undefined
-                })),
+                nodes: graphData.nodes.map(n => {
+                  // Extract meaningful label from properties
+                  const props = n.properties || {}
+                  const label = 
+                    props.name as string ||
+                    props.treatment as string ||
+                    props.drug_name as string ||
+                    props.label as string ||
+                    props.title as string ||
+                    props.guideline_name as string ||
+                    props.test_name as string ||
+                    props.loinc_name as string ||
+                    props.concept_name as string ||
+                    props.description as string ||
+                    props.code as string ||
+                    (typeof props.id === 'string' ? props.id : null) ||
+                    n.id.split(':').pop() ||
+                    n.id
+                  
+                  return {
+                    id: n.id,
+                    label: String(label).substring(0, 50), // Limit length
+                    type: n.labels[0],
+                    properties: n.properties,
+                    color: undefined,
+                    size: undefined
+                  }
+                }),
                 edges: graphData.relationships.map(r => ({
                   id: r.id,
                   source: r.startNodeId,

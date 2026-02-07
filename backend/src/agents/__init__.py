@@ -19,11 +19,14 @@ CORE 6-AGENT PIPELINE:
 8. NSCLCAgent: Non-small cell lung cancer specific pathways
 9. SCLCAgent: Small cell lung cancer specific protocols
 10. ComorbidityAgent: Safety assessment and contraindication checking
-11. NegotiationProtocol: Multi-agent conflict resolution (43% fewer deadlocks)
+11. LabInterpretationAgent: LOINC-based lab result interpretation with CTCAE grading
+12. MedicationManagementAgent: RxNorm-based drug-drug interaction checking
+13. MonitoringCoordinatorAgent: Lab-drug coordination and monitoring protocols
+14. NegotiationProtocol: Multi-agent conflict resolution (43% fewer deadlocks)
 
 2026 ENHANCEMENTS - Adaptive Systems:
-12. DynamicOrchestrator: Complexity-based routing (43% speedup)
-13. IntegratedWorkflow: Complete system with all enhancements
+15. DynamicOrchestrator: Complexity-based routing (43% speedup)
+16. IntegratedWorkflow: Complete system with all enhancements
 
 CRITICAL PRINCIPLES:
 - "Neo4j as a tool, not a brain" - All medical reasoning in Python/OWL
@@ -49,6 +52,9 @@ from .biomarker_agent import BiomarkerAgent
 from .nsclc_agent import NSCLCAgent
 from .sclc_agent import SCLCAgent
 from .comorbidity_agent import ComorbidityAgent
+from .lab_interpretation_agent import LabInterpretationAgent
+from .medication_management_agent import MedicationManagementAgent
+from .monitoring_coordinator_agent import MonitoringCoordinatorAgent
 from .negotiation_protocol import NegotiationProtocol, NegotiationStrategy, AgentProposal
 
 # 2026 Adaptive orchestration
@@ -82,6 +88,9 @@ __all__ = [
     "NSCLCAgent",
     "SCLCAgent",
     "ComorbidityAgent",
+    "LabInterpretationAgent",
+    "MedicationManagementAgent",
+    "MonitoringCoordinatorAgent",
     "NegotiationProtocol",
     "NegotiationStrategy",
     "AgentProposal",

@@ -277,16 +277,26 @@ export default function ChatInterface({ onGraphDataChange, onDecisionNodesChange
     {
       id: 'welcome',
       role: 'assistant',
-      content: `# Welcome to LCA Assistant! 🫁
+      content: `## ConsensusCare - Clinical Decision Support
 
-I help with lung cancer treatment decisions using evidence-based guidelines.
+Powered by LUCADA ontology, NCCN/NICE/ESMO guidelines, and multi-agent AI workflow.
 
-**How to use me:**
-- Describe a patient case (e.g., "68M, stage IIIA adenocarcinoma, EGFR Ex19del+")
-- Ask questions about treatment options
-- Explore biomarker-driven therapies
+### Quick Start
 
-Try describing a patient to get started!`,
+| Action | Example |
+|--------|---------|
+| **Analyze Patient** | "68M, stage IIIA adenocarcinoma, EGFR Ex19del+, PS 1" |
+| **Ask Guidelines** | "What is first-line for stage IV NSCLC with PD-L1 80%?" |
+| **Query Database** | "How many patients are in the database?" |
+| **Explore Biomarkers** | "Explain KRAS G12C treatment options" |
+
+### Capabilities
+- **10 guideline rules** (NICE CG121 + modern precision medicine)
+- **Multi-agent workflow** with LangGraph orchestration
+- **Neo4j knowledge graph** with decision traces
+- **LLM-powered** clinical reasoning (Ollama)
+
+Type \`help\` for full details or describe a patient case to begin.`,
       timestamp: 'Welcome'
     }
   ])

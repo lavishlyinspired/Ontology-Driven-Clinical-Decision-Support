@@ -7,6 +7,7 @@ Enhanced with LangChain/LangGraph for memory and intelligent conversations
 import json
 import re
 import logging
+import os
 from typing import Dict, List, Optional, AsyncIterator, Any, Literal
 from datetime import datetime
 import asyncio
@@ -20,8 +21,9 @@ from ..logging_config import get_logger, log_execution
 logger = get_logger(__name__)
 # LangChain/LangGraph imports for enhanced conversations
 try:
-    from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
     from langchain_core.runnables import RunnableConfig
+    from langchain_core.prompts import ChatPromptTemplate
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.checkpoint.base import BaseCheckpointSaver
     from langgraph.graph import StateGraph, END
@@ -30,6 +32,14 @@ try:
 except ImportError:
     logger.warning("LangChain/LangGraph not available - enhanced features disabled")
     LANGGRAPH_AVAILABLE = False
+
+# Ollama LLM for intelligent responses
+try:
+    from langchain_ollama import ChatOllama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    logger.warning("langchain_ollama not available - LLM responses disabled")
+    OLLAMA_AVAILABLE = False
 
 # Centralized logging
 from ..logging_config import get_logger, log_execution, create_sse_log_handler
@@ -41,6 +51,94 @@ from .mcp_client import get_mcp_invoker
 from .clustering_service import ClusteringService, ClusteringMethod
 
 logger = get_logger(__name__)
+
+
+# =============================================================================
+# Clinical System Prompt for LLM-Powered Responses
+# =============================================================================
+
+CLINICAL_SYSTEM_PROMPT = """You are **ConsensusCare**, an expert lung cancer clinical decision support assistant built on the LUCADA ontology (Lung Cancer Data) and NICE/NCCN/ESMO guidelines.
+
+## Your Knowledge Base
+- **Ontology**: LUCADA OWL2 with 68 classes covering Patient, Diagnosis, TreatmentPlan, Biomarker, Comorbidity, and Decision entities
+- **Standards**: SNOMED-CT (diagnosis coding), RxNorm (medications), LOINC (lab tests)
+- **Guidelines**: NICE CG121, NCCN NSCLC/SCLC 2025, ESMO Clinical Practice Guidelines
+- **Graph Database**: Neo4j knowledge graph with patient records, treatment decisions, causal chains, and guideline references
+
+## Clinical Guidelines Summary
+
+### NSCLC Treatment by Stage
+| Stage | PS 0-1 | PS 2 | PS 3-4 |
+|-------|--------|------|--------|
+| I-II | Surgery ± adjuvant chemo | Radiotherapy (SABR) | Best supportive care |
+| IIIA | Chemoradiotherapy or Surgery+chemo | Radiotherapy | Palliative care |
+| IIIB | Concurrent chemoradiotherapy | Sequential chemoRT | Palliative care |
+| IV | Systemic therapy (biomarker-driven) | Modified systemic therapy | Palliative care |
+
+### Biomarker-Driven Therapy (Stage IIIB-IV NSCLC)
+| Biomarker | Positive Result | First-Line Treatment | Key Trial |
+|-----------|-----------------|---------------------|-----------|
+| EGFR (Ex19del/L858R) | Mutation detected | Osimertinib 80mg daily | FLAURA (OS 38.6mo) |
+| ALK rearrangement | Fusion detected | Alectinib 600mg BID | ALEX (PFS 34.8mo) |
+| ROS1 fusion | Fusion detected | Crizotinib/Entrectinib | PROFILE 1001 |
+| BRAF V600E | Mutation detected | Dabrafenib + Trametinib | BRF113928 |
+| KRAS G12C | Mutation detected | Sotorasib/Adagrasib | CodeBreaK 200 |
+| PD-L1 ≥50% | High expression | Pembrolizumab mono | KEYNOTE-024 (5yr OS 31.9%) |
+| PD-L1 1-49% | Low expression | Chemo + Pembrolizumab | KEYNOTE-189 (OS 22mo) |
+| PD-L1 <1% | Negative | Chemo + IO combination | CheckMate-9LA |
+
+### SCLC Treatment
+| Stage | Treatment | Key Evidence |
+|-------|-----------|-------------|
+| Limited | Concurrent chemoRT (cisplatin/etoposide) + PCI | Turrisi (OS 23mo) |
+| Extensive | Chemo + Atezolizumab/Durvalumab | IMpower133/CASPIAN |
+
+### Adjuvant/Neoadjuvant
+- **ADAURA**: Adjuvant osimertinib for resected IB-IIIA EGFR+ NSCLC (DFS HR 0.17)
+- **CheckMate-816**: Neoadjuvant nivolumab + chemo for resectable NSCLC (pCR 24%)
+- **IMpower010**: Adjuvant atezolizumab for II-IIIA PD-L1+ NSCLC
+
+## Response Formatting Rules
+1. Use markdown with headers (##), tables, and bullet points
+2. Always cite guideline source and evidence level (Grade A/B/C or Category 1/2A/2B)
+3. Include survival data from landmark trials when relevant
+4. Flag contraindications with ⚠️
+5. Suggest next steps and follow-up questions
+6. For biomarker-driven therapy, always mention the specific mutation/fusion and preferred agent
+7. Be concise but thorough - aim for clinical utility
+8. If information is uncertain, say so explicitly rather than guessing"""
+
+FOLLOW_UP_SYSTEM_PROMPT = """You are ConsensusCare, a lung cancer clinical decision support assistant.
+You are answering a follow-up question about a patient case that was just analyzed.
+
+Use the patient data and analysis results provided to give a specific, evidence-based answer.
+Format your response with clear markdown headers, tables where appropriate, and clinical citations.
+Be thorough but concise. Prioritize actionable clinical information."""
+
+TEXT2CYPHER_SYSTEM_PROMPT = """You are a Neo4j Cypher query expert for a lung cancer clinical decision support system.
+
+The graph schema has these node types:
+- Patient (patient_id, name, age, age_at_diagnosis, sex, tnm_stage, histology_type, performance_status, laterality)
+- Diagnosis (diagnosis_type, icd10_code, snomed_code)
+- TreatmentDecision (id, decision_type, category, status, treatment, reasoning, confidence_score, risk_factors, decision_timestamp)
+- Biomarker (marker_type, value, status)
+- Comorbidity (name, condition)
+- Guideline (name, source, evidence_level)
+- TreatmentRecommendation (treatment_type, evidence_level, treatment_intent, survival_benefit)
+
+Relationships:
+- (Patient)-[:HAS_DIAGNOSIS]->(Diagnosis)
+- (Patient)-[:HAS_BIOMARKER]->(Biomarker)
+- (Patient)-[:HAS_COMORBIDITY]->(Comorbidity)
+- (TreatmentDecision)-[:ABOUT]->(Patient)
+- (TreatmentDecision)-[:BASED_ON]->(Biomarker)
+- (TreatmentDecision)-[:APPLIED_GUIDELINE]->(Guideline)
+- (TreatmentDecision)-[:CAUSED|INFLUENCED]->(TreatmentDecision)
+- (TreatmentDecision)-[:FOLLOWED_PRECEDENT]->(TreatmentDecision)
+- (Patient)-[:RECEIVED_RECOMMENDATION]->(TreatmentRecommendation)
+
+Return ONLY the Cypher query, no explanation. Use parameters where appropriate ($param syntax).
+Always include RETURN clause. Limit results to 20 unless specifically asked for more."""
 
 
 # =============================================================================
@@ -164,11 +262,29 @@ class ConversationService:
         self.sessions: Dict[str, List[Dict]] = {}  # session_id -> message history
         self.patient_context: Dict[str, Dict] = {}  # session_id -> {patient_data, result}
         self.enhanced_context: Dict[str, ConversationContext] = {}  # session_id -> enhanced context
-        
+
         # Enhanced features
         self.enable_enhanced_features = enable_enhanced_features and LANGGRAPH_AVAILABLE
         self.follow_up_generator = FollowUpGenerator()
-        
+
+        # Initialize LLM for intelligent responses
+        self.llm = None
+        self.llm_available = False
+        if OLLAMA_AVAILABLE:
+            try:
+                model_name = os.getenv("OLLAMA_MODEL", "llama3.2:latest")
+                base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                self.llm = ChatOllama(
+                    model=model_name,
+                    base_url=base_url,
+                    temperature=0.3,
+                    num_predict=2048,
+                )
+                self.llm_available = True
+                logger.info(f"LLM initialized: {model_name} at {base_url}")
+            except Exception as e:
+                logger.warning(f"LLM initialization failed: {e} - falling back to template responses")
+
         # LangGraph setup for enhanced conversations
         if self.enable_enhanced_features:
             self.checkpointer = InMemorySaver()
@@ -331,6 +447,9 @@ class ConversationService:
             elif intent == "clustering_analysis":
                 async for chunk in self._stream_clustering_analysis(message, session_id):
                     yield chunk
+            elif intent == "graph_query":
+                async for chunk in self._stream_graph_query(message, session_id):
+                    yield chunk
             else:
                 async for chunk in self._stream_general_qa(message, session_id):
                     yield chunk
@@ -347,7 +466,8 @@ class ConversationService:
         Classify user intent considering conversation context
 
         Returns:
-            "patient_lookup", "patient_analysis", "follow_up", "mcp_tool", "mcp_app", "clustering_analysis", or "general_qa"
+            "patient_lookup", "patient_analysis", "follow_up", "mcp_tool", "mcp_app",
+            "clustering_analysis", "graph_query", or "general_qa"
         """
         # Check for patient ID lookup patterns
         patient_id_patterns = [
@@ -361,7 +481,25 @@ class ConversationService:
         for pattern in patient_id_patterns:
             if re.search(pattern, message, re.IGNORECASE):
                 return "patient_lookup"
-        
+
+        # Check for graph/database query patterns (Text2Cypher)
+        graph_query_patterns = [
+            r'how\s+many\s+patient',
+            r'show\s+(me\s+)?(all\s+)?patient',
+            r'list\s+(all\s+)?patient',
+            r'query\s+(the\s+)?(graph|database|neo4j)',
+            r'what\s+patient.+in\s+(the\s+)?database',
+            r'count\s+(all\s+)?patient',
+            r'show\s+(me\s+)?(all\s+)?treatment\s+decision',
+            r'what\s+decisions?\s+(have\s+been|were)\s+made',
+            r'graph\s+statistics',
+            r'database\s+summary',
+            r'run\s+cypher',
+        ]
+        for pattern in graph_query_patterns:
+            if re.search(pattern, message, re.IGNORECASE):
+                return "graph_query"
+
         # Check for MCP App invocation patterns
         mcp_app_patterns = [
             r'compare\s+treatment',
@@ -426,13 +564,30 @@ class ConversationService:
                 if re.search(pattern, message, re.IGNORECASE):
                     return "follow_up"
 
-        # Keywords that indicate new patient data
+        # General knowledge questions (check BEFORE patient indicators)
+        general_question_patterns = [
+            r'^(explain|what\s+(is|are)|describe|tell\s+me\s+about|how\s+(does|do))\s+',
+            r'treatment\s+options?\s+for',
+            r'guidelines?\s+for',
+            r'evidence\s+for',
+            r'mechanism\s+of',
+            r'efficacy\s+of',
+        ]
+        for pattern in general_question_patterns:
+            if re.search(pattern, message, re.IGNORECASE):
+                # But if it contains clear patient data, it's still patient_analysis
+                has_patient_context = bool(re.search(r'\d{2}[-\s]?(year|yr)[-\s]?old|stage\s+(I{1,3}[ABC]?|IV)', message, re.IGNORECASE))
+                if not has_patient_context:
+                    return "general_qa"
+
+        # Keywords that indicate new patient data (not general questions)
         patient_indicators = [
             r'\d{2}[-\s]?(year|yr)[-\s]?old',
             r'stage\s+(I{1,3}[ABC]?|IV)',
             r'\b\d{2,3}\s*[MF]\b',
             r'(adenocarcinoma|squamous|small\s+cell|SCLC|NSCLC)',
-            r'(EGFR|ALK|ROS1|BRAF|KRAS|PD-L1)',
+            # Biomarker patterns: only match when in patient context (positive/negative/mutation/wild-type)
+            r'(EGFR|ALK|ROS1|BRAF|KRAS|PD-L1)\s*(positive|negative|mutation|mutant|wild[\s-]?type|\+|\-|status)',
             r'(PS|performance\s+status|ECOG)\s*[:\-]?\s*[0-4]',
             r'T\d+N\d+M\d+',
             r'comorbid',
@@ -1294,16 +1449,79 @@ The system successfully analyzed your patient case but did not generate specific
             else:
                 logger.warning("[GraphData] Neo4j not available - skipping graph data fetch")
 
-            # Suggest follow-ups
+            # Step 6: Run ontology-based inference (async, non-blocking)
+            inference_details = {}
+            if self.lca_service.graph_db and self.lca_service.graph_db.driver:
+                try:
+                    from ..db.neo4j_inference import Neo4jInferenceEngine
+                    inference_engine = Neo4jInferenceEngine(
+                        driver=self.lca_service.graph_db.driver,
+                        database=getattr(self.lca_service.graph_db, 'database', 'neo4j')
+                    )
+                    patient_id = patient_data.get('patient_id')
+                    
+                    # Run all 6 inference rules
+                    inference_results = await asyncio.to_thread(
+                        inference_engine.run_all_inferences, patient_id
+                    )
+                    
+                    # Get detailed inference results
+                    inference_details = await asyncio.to_thread(
+                        inference_engine.get_patient_inferences, patient_id
+                    )
+                    
+                    total_inferred = sum(inference_results.values())
+                    if total_inferred > 0:
+                        # Build detailed provenance message
+                        provenance_parts = ["🧠 **Ontology Inference Engine (6 Rules Applied):**"]
+                        provenance_parts.append(f"\n📊 Total: {total_inferred} knowledge items inferred\n")
+                        
+                        if inference_results.get('cancer_type_classification', 0) > 0:
+                            provenance_parts.append(f"✓ Cancer Classification: {inference_results['cancer_type_classification']} items")
+                        if inference_results.get('biomarker_therapy_inference', 0) > 0:
+                            provenance_parts.append(f"✓ Biomarker-Therapy Links: {inference_results['biomarker_therapy_inference']} items")
+                        if inference_results.get('guideline_applicability', 0) > 0:
+                            provenance_parts.append(f"✓ Guideline Matching: {inference_results['guideline_applicability']} guidelines")
+                        if inference_results.get('risk_stratification', 0) > 0:
+                            provenance_parts.append(f"✓ Risk Stratification: {inference_results['risk_stratification']} assessments")
+                        if inference_results.get('contraindication_check', 0) > 0:
+                            provenance_parts.append(f"✓ Contraindication Check: {inference_results['contraindication_check']} warnings")
+                        if inference_results.get('stage_group_inference', 0) > 0:
+                            provenance_parts.append(f"✓ Stage Grouping: {inference_results['stage_group_inference']} classifications")
+                        
+                        # Add specific inferences as provenance
+                        if inference_details.get('classification'):
+                            cls = inference_details['classification']
+                            provenance_parts.append(f"\n📌 **Inferred Classification:** {cls.get('cancer_subtype', 'N/A')} ({cls.get('cancer_category', 'N/A')})")
+                        
+                        if inference_details.get('therapy_inferences'):
+                            therapy_classes = [ti.get('therapy_class') for ti in inference_details['therapy_inferences'] if ti.get('therapy_class')]
+                            if therapy_classes:
+                                provenance_parts.append(f"📌 **Inferred Therapies:** {', '.join(therapy_classes)}")
+                        
+                        if inference_details.get('stage_group'):
+                            sg = inference_details['stage_group']
+                            provenance_parts.append(f"📌 **Treatment Intent:** {sg.get('treatment_intent', 'N/A')} (Stage Group: {sg.get('stage_group', 'N/A')})")
+                        
+                        if inference_details.get('applicable_guidelines'):
+                            guidelines = inference_details['applicable_guidelines']
+                            if guidelines:
+                                provenance_parts.append(f"📌 **Applicable Guidelines:** {', '.join(guidelines[:3])}")
+                        
+                        yield self._format_sse({
+                            "type": "reasoning",
+                            "content": "\n".join(provenance_parts)
+                        })
+                except Exception as inf_err:
+                    logger.warning(f"Inference engine failed (non-critical): {inf_err}")
+
+            # Suggest follow-ups (context-aware based on actual inference results)
+            suggestions = self._generate_inference_aware_suggestions(
+                patient_data, result, inference_details
+            )
             yield self._format_sse({
                 "type": "suggestions",
-                "content": [
-                    "Show alternative treatments",
-                    "Explain the reasoning",
-                    "Find similar cases",
-                    "Assess comorbidity interactions",
-                    "Check clinical trial eligibility"
-                ]
+                "content": suggestions
             })
 
         except Exception as e:
@@ -1314,54 +1532,978 @@ The system successfully analyzed your patient case but did not generate specific
             })
 
     async def _stream_follow_up(self, message: str, session_id: str) -> AsyncIterator[str]:
-        """Stream follow-up responses using stored patient context"""
+        """Stream follow-up responses using orchestration workflows with full provenance tracking"""
         context = self.patient_context[session_id]
+        patient_data = context.get("patient_data", {})
+        
+        # Track provenance for complete transparency
+        provenance = {
+            "timestamp": datetime.now().isoformat(),
+            "query": message,
+            "data_sources": [],
+            "agents_used": [],
+            "database_queries": [],
+            "inferences_applied": []
+        }
 
         yield self._format_sse({
             "type": "status",
-            "content": "Analyzing follow-up with patient context..."
+            "content": "🔍 Analyzing follow-up with orchestration workflow..."
         })
 
-        response = self._handle_follow_up(message, context)
+        # Step 1: Assess query complexity to route to appropriate workflow
+        query_complexity = self._assess_followup_complexity(message, patient_data)
+        provenance["query_complexity"] = query_complexity
+        
+        yield self._format_sse({
+            "type": "reasoning",
+            "content": f"📊 **Query Complexity:** {query_complexity.upper()} → {'Advanced' if query_complexity in ['complex', 'critical'] else 'Basic'} Workflow"
+        })
 
+        # Step 2: Try graph database lookup (most grounded)
+        yield self._format_sse({
+            "type": "status",
+            "content": "🗄️ Querying Neo4j graph database..."
+        })
+        
+        graph_response, graph_provenance = await self._graph_based_followup_with_provenance(message, context)
+        provenance["data_sources"].extend(graph_provenance.get("sources", []))
+        provenance["database_queries"].extend(graph_provenance.get("queries", []))
+        
+        if graph_response:
+            provenance["primary_source"] = "Neo4j Graph Database"
+            yield self._format_sse({
+                "type": "reasoning",
+                "content": f"✅ **Data Source:** Neo4j Graph Database\n📈 **Queries Executed:** {len(graph_provenance.get('queries', []))}\n🔗 **Nodes Retrieved:** {graph_provenance.get('nodes_count', 0)}"
+            })
+            response = graph_response
+        else:
+            # Step 3: Try orchestration workflow (adaptive)
+            yield self._format_sse({
+                "type": "status",
+                "content": f"🤖 Invoking {query_complexity} orchestration workflow..."
+            })
+            
+            workflow_response, workflow_provenance = await self._workflow_based_followup(message, context, query_complexity)
+            provenance["agents_used"].extend(workflow_provenance.get("agents", []))
+            provenance["inferences_applied"].extend(workflow_provenance.get("inferences", []))
+            
+            if workflow_response:
+                provenance["primary_source"] = f"Orchestration Workflow ({query_complexity})"
+                yield self._format_sse({
+                    "type": "reasoning",
+                    "content": f"✅ **Data Source:** {query_complexity.capitalize()} Orchestration Workflow\n🤖 **Agents Used:** {', '.join(workflow_provenance.get('agents', [])[:5])}\n🧠 **Inferences:** {len(workflow_provenance.get('inferences', []))}"
+                })
+                response = workflow_response
+            else:
+                # Step 4: Try ontology-based inference
+                yield self._format_sse({
+                    "type": "status",
+                    "content": "🧬 Querying LUCADA ontology..."
+                })
+                
+                ontology_response = self._ontology_based_followup(message, context)
+                
+                if ontology_response:
+                    provenance["primary_source"] = "LUCADA Ontology + Guidelines"
+                    provenance["data_sources"].append("LUCADA OWL Ontology")
+                    provenance["data_sources"].append("Clinical Guidelines (NICE/NCCN/ESMO)")
+                    yield self._format_sse({
+                        "type": "reasoning",
+                        "content": "✅ **Data Source:** LUCADA OWL Ontology + Clinical Guidelines"
+                    })
+                    response = ontology_response
+                else:
+                    # Step 5: Template-based response (NO LLM FALLBACK)
+                    template_response = self._handle_follow_up(message, context)
+                    
+                    if template_response and len(template_response) > 50:
+                        provenance["primary_source"] = "Clinical Decision Templates"
+                        provenance["data_sources"].append("Patient Context")
+                        yield self._format_sse({
+                            "type": "reasoning",
+                            "content": "📋 **Data Source:** Clinical Decision Templates (Patient Context)"
+                        })
+                        response = template_response
+                    else:
+                        # NO DATA AVAILABLE - Be honest
+                        provenance["primary_source"] = "None - Insufficient Data"
+                        yield self._format_sse({
+                            "type": "reasoning",
+                            "content": "⚠️ **Data Source:** None available in database/ontology"
+                        })
+                        response = self._build_no_data_response(message, patient_data)
+
+        # Stream provenance tracking
+        yield self._format_sse({
+            "type": "provenance",
+            "content": provenance
+        })
+        
         yield self._format_sse({
             "type": "text",
             "content": response
         })
 
-        # Provide updated suggestions
+        # Generate context-aware follow-up suggestions
+        patient_data = context.get("patient_data", {})
+        result = context.get("result")
+        suggestions = self._generate_patient_aware_suggestions(message, patient_data, result)
+
         yield self._format_sse({
             "type": "suggestions",
-            "content": [
-                "Show alternative treatments",
-                "Explain the reasoning",
-                "Find similar cases",
-                "Assess comorbidity interactions",
-                "Check clinical trial eligibility"
-            ]
+            "content": suggestions
+        })
+
+        # Generate context-aware follow-up suggestions
+        result = context.get("result")
+        suggestions = self._generate_patient_aware_suggestions(message, patient_data, result)
+
+        yield self._format_sse({
+            "type": "suggestions",
+            "content": suggestions
         })
 
         self._add_to_history(session_id, "assistant", response)
 
+    def _assess_followup_complexity(self, message: str, patient_data: Dict) -> str:
+        """Assess follow-up query complexity to route to appropriate workflow"""
+        message_lower = message.lower()
+        
+        # Critical complexity triggers
+        critical_keywords = ["counterfactual", "what if", "alternative outcome", "survival prediction", "trial matching"]
+        if any(kw in message_lower for kw in critical_keywords):
+            return "critical"
+        
+        # Complex triggers
+        complex_keywords = ["similar patient", "comparative", "survival", "prognosis", "risk stratification", "biomarker interaction"]
+        if any(kw in message_lower for kw in complex_keywords):
+            return "complex"
+        
+        # Moderate triggers
+        moderate_keywords = ["guideline", "evidence", "trial", "contraindication", "drug interaction"]
+        if any(kw in message_lower for kw in moderate_keywords):
+            return "moderate"
+        
+        # Simple by default
+        return "simple"
+
+    def _build_no_data_response(self, message: str, patient_data: Dict) -> str:
+        """Build honest response when no data is available in database/ontology"""
+        response = "## ⚠️ Insufficient Data in Database\n\n"
+        response += "I searched the following sources:\n\n"
+        response += "- ❌ **Neo4j Graph Database**: No matching records found\n"
+        response += "- ❌ **LUCADA OWL Ontology**: No applicable inference rules\n"
+        response += "- ❌ **Clinical Guidelines**: No specific guidance for this query\n"
+        response += "- ❌ **Patient Context Templates**: Limited template coverage\n\n"
+        response += "**What you can do:**\n\n"
+        response += f"1. Try rephrasing your question: \"{message}\"\n"
+        response += "2. Ask about specific patient aspects: biomarkers, stage, treatments\n"
+        response += "3. Query the graph database directly (see suggestions below)\n\n"
+        response += "**Available Data for this Patient:**\n\n"
+        
+        # Show what data we DO have
+        if patient_data:
+            response += f"- Stage: {patient_data.get('tnm_stage', 'Unknown')}\n"
+            response += f"- Histology: {patient_data.get('histology_type', 'Unknown')}\n"
+            biomarkers = patient_data.get('biomarker_profile', {})
+            if biomarkers:
+                response += f"- Biomarkers: {', '.join([f'{k}={v}' for k, v in biomarkers.items()])}\n"
+        else:
+            response += "*No patient context available*\n"
+        
+        return response
+
+    async def _graph_based_followup_with_provenance(self, message: str, context: Dict) -> tuple[Optional[str], Dict]:
+        """Query Neo4j with detailed provenance tracking"""
+        provenance = {"sources": [], "queries": [], "nodes_count": 0}
+        result = await self._graph_based_followup(message, context)
+        
+        if result:
+            provenance["sources"].append("Neo4j Graph Database")
+            # Count queries executed (approximate)
+            message_lower = message.lower()
+            if "similar" in message_lower:
+                provenance["queries"].append("MATCH (similar:Patient) WHERE stage/histology match")
+            if any(kw in message_lower for kw in ["biomarker", "egfr", "alk"]):
+                provenance["queries"].append("MATCH (p)-[:HAS_BIOMARKER]->(b)")
+                provenance["queries"].append("MATCH (p)-[:HAS_INFERENCE]->(inf:TherapyInference)")
+            if any(kw in message_lower for kw in ["contraindication", "comorbidity"]):
+                provenance["queries"].append("MATCH (p)-[:HAS_COMORBIDITY]->(c)")
+                provenance["queries"].append("MATCH (p)-[:HAS_INFERENCE]->(ci:ContraindicationInference)")
+            if "inference" in message_lower or "classification" in message_lower:
+                provenance["queries"].append("MATCH (p)-[:HAS_CLASSIFICATION]->(cls)")
+                provenance["queries"].append("Neo4jInferenceEngine.get_patient_inferences()")
+        
+        return result, provenance
+
+    async def _workflow_based_followup(self, message: str, context: Dict, complexity: str) -> tuple[Optional[str], Dict]:
+        """Use orchestration workflows to answer follow-up questions"""
+        provenance = {"agents": [], "inferences": [], "workflow_type": complexity}
+        patient_data = context.get("patient_data", {})
+        
+        try:
+            # Assess if we need advanced workflow
+            use_advanced = complexity in ["complex", "critical"]
+            
+            # Build augmented patient data with follow-up context
+            augmented_data = patient_data.copy()
+            augmented_data["_followup_query"] = message
+            augmented_data["_followup_complexity"] = complexity
+            
+            # Run workflow
+            if use_advanced and self.lca_service.integrated_workflow:
+                provenance["workflow_type"] = "integrated_advanced"
+                provenance["agents"].extend([
+                    "IngestionAgent",
+                    "SemanticMappingAgent",
+                    "ClassificationAgent",
+                    "BiomarkerAgent",
+                    "NSCLCAgent/SCLCAgent",
+                    "ComorbidityAgent",
+                    "LabInterpretationAgent",
+                    "MedicationManagementAgent",
+                    "MonitoringCoordinatorAgent",
+                    "ConflictResolutionAgent",
+                    "UncertaintyQuantifier"
+                ])
+                
+                result = await self.lca_service.integrated_workflow.analyze_patient_comprehensive(
+                    patient_data=augmented_data,
+                    persist=False,
+                    progress_callback=None
+                )
+                
+                provenance["agents_used_count"] = len(result.get("agent_chain", []))
+                provenance["inferences"].extend(result.get("analytics", {}).get("inferences", []))
+                
+                # Extract relevant information from result
+                response = self._format_workflow_result_for_followup(result, message)
+                return response, provenance
+            else:
+                # Use basic workflow
+                provenance["workflow_type"] = "basic_6agent"
+                provenance["agents"].extend([
+                    "IngestionAgent",
+                    "SemanticMappingAgent",
+                    "ClassificationAgent",
+                    "ConflictResolutionAgent",
+                    "PersistenceAgent",
+                    "ExplanationAgent"
+                ])
+                
+                result = await self.lca_service.process_patient(
+                    patient_data=augmented_data,
+                    use_ai_workflow=False,
+                    force_advanced=False
+                )
+                
+                if result and hasattr(result, 'recommendations'):
+                    response = self._format_workflow_result_for_followup(result, message)
+                    return response, provenance
+        
+        except Exception as e:
+            logger.error(f"Workflow-based followup error: {e}", exc_info=True)
+            provenance["error"] = str(e)
+        
+        return None, provenance
+    
+    def _format_workflow_result_for_followup(self, result, query: str) -> str:
+        """Format workflow result as a follow-up answer"""
+        response = "## 🤖 Orchestration Workflow Analysis\n\n"
+        
+        # Check if result is dict (integrated workflow) or object (basic workflow)
+        if isinstance(result, dict):
+            # Integrated workflow result
+            response += f"**Workflow:** {result.get('workflow_version', 'Integrated')}\n"
+            response += f"**Complexity:** {result.get('complexity', 'Unknown')}\n"
+            response += f"**Agents Executed:** {len(result.get('successful_agents', []))}\n\n"
+            
+            if result.get('recommendations'):
+                response += "### Recommendations\n\n"
+                for i, rec in enumerate(result['recommendations'][:3], 1):
+                    if isinstance(rec, dict):
+                        response += f"{i}. **{rec.get('treatment', 'Unknown')}**\n"
+                        response += f"   - Evidence: {rec.get('evidence_level', 'N/A')}\n"
+                        response += f"   - Confidence: {rec.get('confidence', 'N/A')}\n\n"
+            
+            if result.get('analytics'):
+                analytics = result['analytics']
+                response += "### Analytics\n\n"
+                if analytics.get('uncertainty'):
+                    response += f"- **Uncertainty Score:** {analytics['uncertainty']}\n"
+                if analytics.get('survival_analysis'):
+                    response += f"- **Survival Analysis:** Available\n"
+        else:
+            # Basic workflow result
+            if hasattr(result, 'recommendations') and result.recommendations:
+                response += "### Recommendations\n\n"
+                for i, rec in enumerate(result.recommendations[:3], 1):
+                    treatment = getattr(rec, 'treatment_type', getattr(rec, 'treatment', 'Unknown'))
+                    evidence = getattr(rec, 'evidence_level', 'N/A')
+                    response += f"{i}. **{treatment}** (Evidence: {evidence})\n"
+            
+            if hasattr(result, 'mdt_summary') and result.mdt_summary:
+                response += f"\n### Summary\n\n{str(result.mdt_summary)[:500]}...\n"
+        
+        return response
+
+    async def _graph_based_followup(self, message: str, context: Dict) -> Optional[str]:
+        """Query Neo4j graph database for grounded answers to follow-up questions"""
+        if not self.lca_service.graph_db or not self.lca_service.graph_db.driver:
+            return None
+        
+        patient_data = context.get("patient_data", {})
+        patient_id = patient_data.get("patient_id")
+        
+        if not patient_id:
+            return None
+        
+        message_lower = message.lower()
+        
+        try:
+            # Query for similar patients
+            if any(kw in message_lower for kw in ["similar", "comparable", "like this"]):
+                query = """
+                MATCH (p:Patient {patient_id: $patient_id})
+                MATCH (similar:Patient)
+                WHERE p.patient_id <> similar.patient_id
+                  AND p.tnm_stage = similar.tnm_stage
+                  AND p.histology_type = similar.histology_type
+                WITH similar
+                OPTIONAL MATCH (similar)-[:RECEIVED_RECOMMENDATION]->(rec)
+                RETURN similar.patient_id as id, 
+                       similar.age as age,
+                       similar.sex as sex,
+                       similar.tnm_stage as stage,
+                       similar.histology_type as histology,
+                       collect(rec.treatment) as treatments
+                LIMIT 5
+                """
+                
+                with self.lca_service.graph_db.driver.session() as session:
+                    result = session.run(query, patient_id=patient_id)
+                    records = list(result)
+                    
+                    if records:
+                        response = "## \ud83d\udcc8 Similar Patients from Database\\n\\n"
+                        response += "Found **{}** similar patients with matching stage and histology:\\n\\n".format(len(records))
+                        
+                        for i, rec in enumerate(records, 1):
+                            response += f"### Patient {i}: {rec['id']}\\n\\n"
+                            response += f"- Age: {rec['age']} | Sex: {rec['sex']}\\n"
+                            response += f"- Stage: {rec['stage']} | Histology: {rec['histology']}\\n"
+                            if rec['treatments']:
+                                response += f"- Treatments: {', '.join([t for t in rec['treatments'] if t])}\\n"
+                            response += "\\n"
+                        
+                        return response
+            
+            # Query for biomarker-specific treatment data
+            if any(kw in message_lower for kw in ["biomarker", "egfr", "alk", "ros1", "kras", "pdl1"]):
+                query = """
+                MATCH (p:Patient {patient_id: $patient_id})-[:HAS_BIOMARKER]->(b:Biomarker)
+                OPTIONAL MATCH (p)-[:HAS_INFERENCE]->(inf:TherapyInference)
+                RETURN b.marker_type as marker,
+                       b.value as value,
+                       collect(inf.therapy_class) as inferred_therapies
+                """
+                
+                with self.lca_service.graph_db.driver.session() as session:
+                    result = session.run(query, patient_id=patient_id)
+                    records = list(result)
+                    
+                    if records:
+                        response = "## \ud83e\uddec Biomarker-Based Treatment Inference\\n\\n"
+                        response += "**Graph Database Analysis:**\\n\\n"
+                        
+                        for rec in records:
+                            response += f"- **{rec['marker']}**: {rec['value']}\\n"
+                            if rec['inferred_therapies']:
+                                therapies = [t for t in rec['inferred_therapies'] if t]
+                                if therapies:
+                                    response += f"  → Inferred Therapy Classes: {', '.join(therapies)}\\n"
+                        
+                        return response
+            
+            # Query for contraindications
+            if any(kw in message_lower for kw in ["contraindication", "drug interaction", "safety"]):
+                query = """
+                MATCH (p:Patient {patient_id: $patient_id})
+                OPTIONAL MATCH (p)-[:HAS_COMORBIDITY]->(c:Comorbidity)
+                OPTIONAL MATCH (p)-[:HAS_INFERENCE]->(ci:ContraindicationInference)
+                RETURN collect(DISTINCT c.name) as comorbidities,
+                       collect(DISTINCT ci.drug) as contraindicated_drugs,
+                       collect(DISTINCT ci.reason) as reasons
+                """
+                
+                with self.lca_service.graph_db.driver.session() as session:
+                    result = session.run(query, patient_id=patient_id)
+                    record = result.single()
+                    
+                    if record and (record['contraindicated_drugs'] or record['comorbidities']):
+                        response = "## \u26a0\ufe0f Drug Safety Analysis (Graph Database)\\n\\n"
+                        
+                        if record['comorbidities']:
+                            response += "**Documented Comorbidities:**\\n"
+                            for c in record['comorbidities']:
+                                if c:
+                                    response += f"- {c}\\n"
+                            response += "\\n"
+                        
+                        if record['contraindicated_drugs']:
+                            response += "**Contraindicated Medications:**\\n"
+                            drugs = [d for d in record['contraindicated_drugs'] if d]
+                            for drug in drugs:
+                                response += f"- {drug}\\n"
+                            response += "\\n"
+                        
+                        return response
+            
+            # Query for inferences
+            if any(kw in message_lower for kw in ["inference", "classification", "predicted"]):
+                from ..db.neo4j_inference import Neo4jInferenceEngine
+                
+                inference_engine = Neo4jInferenceEngine(
+                    driver=self.lca_service.graph_db.driver,
+                    database=getattr(self.lca_service.graph_db, 'database', 'neo4j')
+                )
+                
+                inferences = inference_engine.get_patient_inferences(patient_id)
+                
+                if inferences and any(inferences.values()):
+                    response = "## \ud83e\udde0 Ontology-Based Inferences\\n\\n"
+                    
+                    if inferences.get('classification'):
+                        cls = inferences['classification']
+                        response += f"**Cancer Classification:**\\n"
+                        response += f"- Subtype: {cls.get('cancer_subtype', 'Unknown')}\\n"
+                        response += f"- Category: {cls.get('cancer_category', 'Unknown')}\\n\\n"
+                    
+                    if inferences.get('therapy_inferences'):
+                        response += f"**Therapy Inferences:** {len(inferences['therapy_inferences'])} identified\\n"
+                        for inf in inferences['therapy_inferences'][:5]:
+                            response += f"- {inf.get('therapy_class', 'Unknown')} (from {inf.get('biomarker', 'biomarker analysis')})\\n"
+                        response += "\\n"
+                    
+                    if inferences.get('risk_level'):
+                        response += f"**Risk Assessment:** {inferences['risk_level']}\\n\\n"
+                    
+                    return response
+                    
+        except Exception as e:
+            logger.error(f"Graph-based followup error: {e}", exc_info=True)
+            return None
+        
+        return None
+
+    def _ontology_based_followup(self, message: str, context: Dict) -> Optional[str]:
+        """Use LUCADA ontology and guideline rules for grounded answers"""
+        patient_data = context.get("patient_data", {})
+        message_lower = message.lower()
+        
+        # Query guideline rules from ontology
+        if any(kw in message_lower for kw in ["guideline", "evidence", "nccn", "nice", "esmo", "trial"]):
+            try:
+                # Get applicable guidelines from rule engine
+                if hasattr(self.lca_service, 'rule_engine'):
+                    stage = patient_data.get('tnm_stage', '')
+                    histology = patient_data.get('histology_type', '')
+                    
+                    matching_rules = []
+                    for rule_id, rule in self.lca_service.rule_engine.rules.items():
+                        rule_dict = rule if isinstance(rule, dict) else rule.__dict__
+                        # Check if rule applies to this patient
+                        if stage.upper() in str(rule_dict.get('applies_to_stage', '')).upper():
+                            matching_rules.append((rule_id, rule_dict))
+                    
+                    if matching_rules:
+                        response = "## \ud83d\udcda Clinical Guidelines (LUCADA Ontology)\\n\\n"
+                        response += f"Found **{len(matching_rules)}** applicable guideline rules:\\n\\n"
+                        
+                        for rule_id, rule in matching_rules[:5]:
+                            response += f"### {rule_id}: {rule.get('name', 'Guideline Rule')}\\n\\n"
+                            response += f"- **Source:** {rule.get('source', 'Clinical Guidelines')}\\n"
+                            response += f"- **Evidence:** {rule.get('evidence_level', 'N/A')}\\n"
+                            response += f"- **Treatment:** {rule.get('treatment', 'See guideline')}\\n"
+                            if rule.get('survival_benefit'):
+                                response += f"- **Benefit:** {rule['survival_benefit']}\\n"
+                            response += "\\n"
+                        
+                        return response
+            except Exception as e:
+                logger.error(f"Ontology-based followup error: {e}", exc_info=True)
+        
+        return None
+
+    def _llm_follow_up_response(self, message: str, context: Dict) -> str:
+        """Generate LLM-powered follow-up response with full patient context"""
+        patient_data = context.get("patient_data", {})
+        result = context.get("result")
+
+        # Build patient summary for LLM
+        patient_summary = self._build_patient_summary_text(patient_data)
+
+        # Build recommendations summary
+        recs_text = "No recommendations available."
+        if result and hasattr(result, 'recommendations') and result.recommendations:
+            recs_parts = []
+            for i, rec in enumerate(result.recommendations[:5], 1):
+                treatment = getattr(rec, 'treatment_type', getattr(rec, 'treatment', 'Unknown'))
+                evidence = getattr(rec, 'evidence_level', 'N/A')
+                intent = getattr(rec, 'treatment_intent', 'N/A')
+                survival = getattr(rec, 'survival_benefit', '')
+                source = getattr(rec, 'rule_source', getattr(rec, 'guideline_reference', ''))
+                recs_parts.append(
+                    f"{i}. {treatment} (Evidence: {evidence}, Intent: {intent}, Source: {source})"
+                    + (f" - {survival}" if survival else "")
+                )
+            recs_text = "\n".join(recs_parts)
+
+        mdt_summary = ""
+        if result and hasattr(result, 'mdt_summary') and result.mdt_summary:
+            mdt_summary = f"\nMDT Summary: {str(result.mdt_summary)[:500]}"
+
+        messages = [
+            SystemMessage(content=FOLLOW_UP_SYSTEM_PROMPT),
+            HumanMessage(content=f"""## Patient Case
+{patient_summary}
+
+## Current Recommendations
+{recs_text}
+{mdt_summary}
+
+## User Follow-up Question
+{message}
+
+Provide a detailed, evidence-based answer. Use markdown formatting with headers, tables, and bullet points. Cite specific guidelines and trials where relevant.""")
+        ]
+
+        response = self.llm.invoke(messages)
+        return response.content
+
+    def _build_patient_summary_text(self, patient_data: Dict) -> str:
+        """Build a concise patient summary for LLM context"""
+        parts = []
+        age = patient_data.get('age', patient_data.get('age_at_diagnosis', '?'))
+        sex = patient_data.get('sex', '?')
+        parts.append(f"- **Demographics:** {age} year old {'male' if sex == 'M' else 'female' if sex == 'F' else sex}")
+        parts.append(f"- **Stage:** {patient_data.get('tnm_stage', 'Unknown')}")
+        parts.append(f"- **Histology:** {patient_data.get('histology_type', 'Unknown')}")
+        parts.append(f"- **Performance Status:** ECOG {patient_data.get('performance_status', '?')}")
+
+        biomarkers = patient_data.get("biomarker_profile", {})
+        if biomarkers:
+            bm_parts = []
+            for k, v in biomarkers.items():
+                if k == "pdl1_tps":
+                    bm_parts.append(f"PD-L1 TPS {v}%")
+                elif isinstance(v, bool):
+                    bm_parts.append(f"{k.replace('_', ' ').upper()} {'Positive' if v else 'Negative'}")
+                elif v:
+                    bm_parts.append(f"{k.replace('_', ' ').upper()} {v}")
+            parts.append(f"- **Biomarkers:** {', '.join(bm_parts)}")
+
+        comorbidities = patient_data.get("comorbidities", [])
+        if comorbidities:
+            parts.append(f"- **Comorbidities:** {', '.join(comorbidities)}")
+
+        return "\n".join(parts)
+
+    def _generate_inference_aware_suggestions(self, patient_data: Dict, result: Any, inference_details: Dict) -> List[str]:
+        """Generate context-aware follow-up suggestions based on inference results"""
+        suggestions = []
+        biomarkers = patient_data.get("biomarker_profile", {})
+        stage = patient_data.get("tnm_stage", "")
+        
+        # Priority 1: Suggestions based on inferred therapies
+        if inference_details.get('therapy_inferences'):
+            therapy_classes = [ti.get('therapy_class') for ti in inference_details['therapy_inferences']]
+            if 'EGFR_TKI' in therapy_classes:
+                suggestions.append("💊 Compare EGFR-TKI options (osimertinib vs gefitinib) with evidence")
+            elif 'ALK_INHIBITOR' in therapy_classes:
+                suggestions.append("💊 Show ALK inhibitor options and sequencing strategies")
+            elif 'IO_MONOTHERAPY' in therapy_classes:
+                suggestions.append("💊 Explain immunotherapy monotherapy vs combination approaches")
+            elif 'CHEMO_IO_COMBINATION' in therapy_classes:
+                suggestions.append("💊 What chemotherapy-IO combinations are recommended?")
+        
+        # Priority 2: Suggestions based on classification
+        if inference_details.get('classification'):
+            cls = inference_details['classification']
+            cancer_type = cls.get('cancer_subtype', '')
+            if 'Squamous' in cancer_type:
+                suggestions.append("🔬 How does squamous histology affect treatment options?")
+            elif 'Adenocarcinoma' in cancer_type:
+                suggestions.append("🔬 What are the biomarker testing priorities for adenocarcinoma?")
+        
+        # Priority 3: Risk-based suggestions
+        if inference_details.get('risk_assessment'):
+            risk = inference_details['risk_assessment']
+            if risk.get('risk_level') == 'HIGH':
+                suggestions.append("⚠️ Review dose modifications for high-risk patient")
+        
+        # Priority 4: Contraindication warnings
+        if inference_details.get('contraindications'):
+            suggestions.append(f"❌ Review {len(inference_details['contraindications'])} contraindication warnings")
+        
+        # Priority 5: Stage-specific suggestions
+        if inference_details.get('stage_group'):
+            sg = inference_details['stage_group']
+            intent = sg.get('treatment_intent', '')
+            if intent == 'Curative':
+                suggestions.append("🎯 What are the surgical options for curative intent?")
+            elif intent == 'Potentially Curative':
+                suggestions.append("🎯 Should we consider combined modality therapy?")
+            elif intent == 'Palliative':
+                suggestions.append("🎯 What palliative care options optimize quality of life?")
+        
+        # Priority 6: Generic clinical suggestions
+        if not suggestions or len(suggestions) < 3:
+            suggestions.extend([
+                "📊 What is the expected prognosis with this treatment?",
+                "🔍 Find similar patient cases in the database",
+                "🧬 Explain all biomarker implications for treatment",
+                "🏥 Check clinical trial eligibility for this patient"
+            ])
+        
+        # Priority 7: Guideline-based suggestions
+        if inference_details.get('applicable_guidelines'):
+            guidelines = inference_details['applicable_guidelines']
+            if guidelines:
+                suggestions.append(f"📖 Compare recommendations across {len(guidelines)} applicable guidelines")
+        
+        return suggestions[:5]
+    
+    def _generate_patient_aware_suggestions(self, message: str, patient_data: Dict, result: Any) -> List[str]:
+        """Generate follow-up suggestions aware of patient context and what was just asked"""
+        msg_lower = message.lower()
+        asked_topics = set()
+
+        # Track what was already asked
+        if any(kw in msg_lower for kw in ["alternative", "other option"]):
+            asked_topics.add("alternatives")
+        if any(kw in msg_lower for kw in ["reasoning", "explain", "why"]):
+            asked_topics.add("reasoning")
+        if any(kw in msg_lower for kw in ["similar", "case"]):
+            asked_topics.add("similar")
+        if any(kw in msg_lower for kw in ["comorbidity", "interaction", "side effect", "toxicity"]):
+            asked_topics.add("comorbidity")
+        if any(kw in msg_lower for kw in ["prognosis", "survival", "outlook"]):
+            asked_topics.add("prognosis")
+        if any(kw in msg_lower for kw in ["biomarker", "mutation", "egfr", "alk"]):
+            asked_topics.add("biomarker")
+        if any(kw in msg_lower for kw in ["trial", "eligibility"]):
+            asked_topics.add("trials")
+
+        suggestions = []
+        biomarkers = patient_data.get("biomarker_profile", {})
+        stage = patient_data.get("tnm_stage", "")
+
+        # Add suggestions for topics NOT yet asked
+        if "alternatives" not in asked_topics:
+            suggestions.append("Show alternative treatments with evidence levels")
+        if "reasoning" not in asked_topics:
+            suggestions.append("Explain the clinical reasoning for this recommendation")
+        if "prognosis" not in asked_topics:
+            suggestions.append("What is the expected prognosis with this treatment?")
+        if "comorbidity" not in asked_topics and patient_data.get("comorbidities"):
+            suggestions.append(f"How do {', '.join(patient_data['comorbidities'][:2])} affect treatment?")
+        if "biomarker" not in asked_topics and biomarkers:
+            suggestions.append("Explain the biomarker implications for treatment selection")
+        if "trials" not in asked_topics:
+            suggestions.append("Check clinical trial eligibility for this patient")
+        if "similar" not in asked_topics:
+            suggestions.append("Find similar patient cases in the database")
+
+        # Add stage-specific suggestions
+        if "III" in stage and "alternatives" not in asked_topics:
+            suggestions.append("Is this patient a candidate for neoadjuvant therapy?")
+        if biomarkers.get("egfr_mutation") and "biomarker" not in asked_topics:
+            suggestions.append("What about osimertinib resistance mechanisms?")
+
+        return suggestions[:5]
+
     async def _stream_general_qa(self, message: str, session_id: str) -> AsyncIterator[str]:
-        """Stream general Q&A responses"""
+        """Stream general Q&A responses with LLM-powered answers"""
 
         yield self._format_sse({
             "type": "status",
-            "content": "Processing your question..."
+            "content": "Analyzing your question with clinical knowledge base..."
         })
 
         # Get conversation history
         history = self._get_session(session_id)
 
-        response = self._generate_qa_response(message, history)
+        # Try streaming LLM response for better UX
+        if self.llm_available and self.llm:
+            try:
+                response = await self._stream_llm_qa(message, history, session_id)
+                yield self._format_sse({
+                    "type": "text",
+                    "content": response
+                })
+                self._add_to_history(session_id, "assistant", response)
 
+                # Generate context-aware suggestions
+                suggestions = self._generate_contextual_suggestions(message, response)
+                yield self._format_sse({
+                    "type": "suggestions",
+                    "content": suggestions
+                })
+                return
+            except Exception as e:
+                logger.warning(f"LLM streaming QA failed: {e}, falling back to template")
+
+        # Fallback to template
+        response = self._generate_qa_response(message, history)
         yield self._format_sse({
             "type": "text",
             "content": response
         })
-
         self._add_to_history(session_id, "assistant", response)
+
+    async def _stream_llm_qa(self, message: str, history: List[Dict], session_id: str) -> str:
+        """Run LLM QA in async context"""
+        return await asyncio.to_thread(self._llm_qa_response, message, history)
+
+    def _generate_contextual_suggestions(self, message: str, response: str) -> List[str]:
+        """Generate context-aware follow-up suggestions based on the conversation"""
+        suggestions = []
+        msg_lower = message.lower()
+        resp_lower = response.lower()
+
+        # Biomarker-related suggestions
+        if any(kw in msg_lower or kw in resp_lower for kw in ["egfr", "alk", "ros1", "braf", "kras"]):
+            suggestions.append("What are the resistance mechanisms for this targeted therapy?")
+            suggestions.append("What is the recommended testing methodology?")
+
+        # Immunotherapy-related
+        if any(kw in msg_lower or kw in resp_lower for kw in ["pd-l1", "immunotherapy", "pembrolizumab", "nivolumab"]):
+            suggestions.append("What are common immune-related adverse events?")
+            suggestions.append("When should immunotherapy be combined with chemotherapy?")
+
+        # Stage-specific
+        if any(kw in msg_lower or kw in resp_lower for kw in ["stage iv", "metastatic", "advanced"]):
+            suggestions.append("What is the role of palliative radiation in metastatic NSCLC?")
+            suggestions.append("When should oligometastatic disease be considered?")
+        elif any(kw in msg_lower or kw in resp_lower for kw in ["stage iii", "locally advanced"]):
+            suggestions.append("What is the role of durvalumab consolidation after chemoRT?")
+            suggestions.append("When is surgical resection appropriate for stage III?")
+        elif any(kw in msg_lower or kw in resp_lower for kw in ["stage i", "stage ii", "early"]):
+            suggestions.append("What adjuvant therapy options exist after surgery?")
+            suggestions.append("When is SABR preferred over surgery?")
+
+        # Default suggestions
+        if not suggestions:
+            suggestions = [
+                "Analyze a patient case",
+                "What are NCCN first-line options for stage IV NSCLC?",
+                "Explain the ADAURA trial results",
+                "When should molecular testing be performed?"
+            ]
+
+        return suggestions[:5]
+
+    # =========================================================================
+    # TEXT2CYPHER - Natural Language Graph Queries
+    # =========================================================================
+
+    async def _stream_graph_query(self, message: str, session_id: str) -> AsyncIterator[str]:
+        """Stream graph query results using Text2Cypher (LLM generates Cypher from natural language)"""
+
+        yield self._format_sse({
+            "type": "status",
+            "content": "Translating your question to a graph database query..."
+        })
+
+        # Check if Neo4j is available
+        if not self.lca_service.graph_db or not self.lca_service.graph_db.driver:
+            yield self._format_sse({
+                "type": "error",
+                "content": "Neo4j database is not connected. Graph queries require an active database connection."
+            })
+            return
+
+        # Generate Cypher query using LLM
+        cypher_query = None
+        if self.llm_available and self.llm:
+            try:
+                cypher_query = await asyncio.to_thread(
+                    self._text2cypher, message
+                )
+            except Exception as e:
+                logger.warning(f"Text2Cypher failed: {e}")
+
+        if not cypher_query:
+            # Fallback to common predefined queries
+            cypher_query = self._get_predefined_query(message)
+
+        if not cypher_query:
+            yield self._format_sse({
+                "type": "error",
+                "content": "Could not generate a graph query for your question. Try: 'How many patients are in the database?' or 'Show all stage IIIA patients'"
+            })
+            return
+
+        yield self._format_sse({
+            "type": "reasoning",
+            "content": f"**Generated Cypher Query:**\n```cypher\n{cypher_query}\n```"
+        })
+
+        # Execute the query
+        try:
+            with self.lca_service.graph_db.driver.session() as session:
+                result = session.run(cypher_query)
+                records = [dict(record) for record in result]
+
+            if not records:
+                yield self._format_sse({
+                    "type": "text",
+                    "content": "## Query Results\n\nNo results found for this query. The database may not have matching data yet."
+                })
+            else:
+                # Format results as markdown table
+                formatted = self._format_query_results(records, message)
+                yield self._format_sse({
+                    "type": "text",
+                    "content": formatted
+                })
+
+            self._add_to_history(session_id, "assistant", f"Graph query executed: {len(records)} results")
+
+        except Exception as e:
+            logger.error(f"Graph query execution error: {e}")
+            yield self._format_sse({
+                "type": "error",
+                "content": f"Query execution failed: {str(e)}\n\nThe generated Cypher may have syntax issues. Try rephrasing your question."
+            })
+
+        yield self._format_sse({
+            "type": "suggestions",
+            "content": [
+                "How many patients are in the database?",
+                "Show all treatment decisions",
+                "List patients by stage",
+                "What guidelines have been applied?",
+                "Show graph statistics"
+            ]
+        })
+
+    def _text2cypher(self, message: str) -> Optional[str]:
+        """Convert natural language to Cypher query using LLM"""
+        messages = [
+            SystemMessage(content=TEXT2CYPHER_SYSTEM_PROMPT),
+            HumanMessage(content=f"Natural language query: {message}\n\nReturn ONLY the Cypher query.")
+        ]
+
+        response = self.llm.invoke(messages)
+        cypher = response.content.strip()
+
+        # Clean up common LLM artifacts
+        if cypher.startswith("```"):
+            # Remove code fences
+            lines = cypher.split("\n")
+            cypher = "\n".join(
+                l for l in lines
+                if not l.strip().startswith("```")
+            ).strip()
+
+        # Basic safety check - prevent destructive operations
+        dangerous_keywords = ["DELETE", "DETACH DELETE", "DROP", "CREATE INDEX", "REMOVE"]
+        cypher_upper = cypher.upper()
+        for kw in dangerous_keywords:
+            if kw in cypher_upper and "RETURN" not in cypher_upper:
+                logger.warning(f"Blocked potentially dangerous Cypher: {cypher}")
+                return None
+
+        return cypher if cypher else None
+
+    def _get_predefined_query(self, message: str) -> Optional[str]:
+        """Get a predefined Cypher query for common questions"""
+        msg_lower = message.lower()
+
+        if "how many patient" in msg_lower or "count patient" in msg_lower:
+            return "MATCH (p:Patient) RETURN count(p) AS patient_count"
+
+        if "all patient" in msg_lower or "list patient" in msg_lower:
+            return """MATCH (p:Patient)
+RETURN p.patient_id AS id, p.age AS age, p.sex AS sex,
+       p.tnm_stage AS stage, p.histology_type AS histology,
+       p.performance_status AS ps
+ORDER BY p.patient_id
+LIMIT 20"""
+
+        if "treatment decision" in msg_lower or "all decision" in msg_lower:
+            return """MATCH (d:TreatmentDecision)-[:ABOUT]->(p:Patient)
+RETURN d.treatment AS treatment, d.category AS category,
+       d.confidence_score AS confidence, p.patient_id AS patient_id,
+       d.decision_timestamp AS timestamp
+ORDER BY d.decision_timestamp DESC
+LIMIT 20"""
+
+        if "graph statistic" in msg_lower or "database summary" in msg_lower:
+            return """MATCH (n)
+WITH labels(n) AS nodeLabels
+UNWIND nodeLabels AS label
+RETURN label AS NodeType, count(*) AS Count
+ORDER BY Count DESC"""
+
+        if "guideline" in msg_lower:
+            return """MATCH (g:Guideline)
+RETURN g.name AS guideline, g.source AS source, g.evidence_level AS evidence
+ORDER BY g.name"""
+
+        if "stage" in msg_lower:
+            # Extract stage from message
+            stage_match = re.search(r'stage\s+(I{1,3}[ABC]?|IV)', message, re.IGNORECASE)
+            if stage_match:
+                stage = stage_match.group(1).upper()
+                return f"""MATCH (p:Patient)
+WHERE p.tnm_stage = '{stage}'
+RETURN p.patient_id AS id, p.age AS age, p.sex AS sex,
+       p.tnm_stage AS stage, p.histology_type AS histology,
+       p.performance_status AS ps
+ORDER BY p.patient_id
+LIMIT 20"""
+
+        return None
+
+    def _format_query_results(self, records: List[Dict], message: str) -> str:
+        """Format Cypher query results as readable markdown"""
+        if not records:
+            return "No results found."
+
+        # Single value result (count, etc.)
+        if len(records) == 1 and len(records[0]) == 1:
+            key, value = list(records[0].items())[0]
+            return f"## Query Result\n\n**{key.replace('_', ' ').title()}:** {value}"
+
+        # Table format
+        headers = list(records[0].keys())
+        header_display = [h.replace("_", " ").title() for h in headers]
+
+        text = f"## Query Results ({len(records)} rows)\n\n"
+        text += "| " + " | ".join(header_display) + " |\n"
+        text += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+
+        for record in records[:20]:  # Limit to 20 rows
+            values = []
+            for h in headers:
+                val = record.get(h, "")
+                if val is None:
+                    val = "-"
+                elif isinstance(val, float):
+                    val = f"{val:.2f}"
+                else:
+                    val = str(val)[:50]  # Truncate long values
+                values.append(val)
+            text += "| " + " | ".join(values) + " |\n"
+
+        if len(records) > 20:
+            text += f"\n*Showing first 20 of {len(records)} results.*\n"
+
+        return text
 
     async def _stream_mcp_tool(self, message: str, session_id: str) -> AsyncIterator[str]:
         """Stream MCP tool invocation responses with enhanced explanations"""
@@ -3083,41 +4225,128 @@ What would you like to know more about?"""
             return "I have the patient context loaded. You can ask about alternative treatments, reasoning, similar cases, biomarkers, comorbidity interactions, prognosis, or clinical trials."
 
     def _generate_qa_response(self, message: str, history: List[Dict]) -> str:
-        """Generate response for general questions"""
+        """Generate response for general questions using LLM with clinical knowledge"""
 
+        # Try LLM-powered response first
+        if self.llm_available and self.llm:
+            try:
+                return self._llm_qa_response(message, history)
+            except Exception as e:
+                logger.warning(f"LLM QA response failed: {e}, falling back to template")
+
+        # Fallback to template responses
         message_lower = message.lower()
 
         if 'help' in message_lower or 'how' in message_lower:
-            return """I can help you with lung cancer treatment decisions!
+            return self._get_help_response()
 
-You can:
-- **Analyze a patient** - Describe the patient (e.g., "68M, stage IIIA adenocarcinoma, EGFR+")
-- **Ask about treatments** - "What are options for stage IV NSCLC?"
-- **Explore biomarkers** - "When should I test for ALK?"
-- **Get guidelines** - "What does NICE recommend for..."
+        return self._get_welcome_response(message)
 
-Try describing a patient case to get started!"""
+    def _llm_qa_response(self, message: str, history: List[Dict]) -> str:
+        """Generate LLM-powered clinical QA response"""
+        # Build conversation context
+        history_text = ""
+        if history:
+            recent = history[-6:]  # Last 6 messages for context
+            history_text = "\n".join([
+                f"{'User' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')[:300]}"
+                for m in recent
+            ])
 
-        elif 'alternative' in message_lower or 'other option' in message_lower:
-            return "To see alternative treatments, please provide the patient details first, and I'll show all suitable options with their evidence levels."
+        # Check if there's active patient context from any session
+        patient_context_text = "No active patient case."
+        for sid, ctx in self.patient_context.items():
+            if ctx.get("patient_data"):
+                pd = ctx["patient_data"]
+                patient_context_text = (
+                    f"Active patient: {pd.get('age', '?')}yo {pd.get('sex', '?')}, "
+                    f"Stage {pd.get('tnm_stage', '?')}, {pd.get('histology_type', '?')}, "
+                    f"PS {pd.get('performance_status', '?')}"
+                )
+                biomarkers = pd.get("biomarker_profile", {})
+                if biomarkers:
+                    bm_parts = []
+                    for k, v in biomarkers.items():
+                        if k == "pdl1_tps":
+                            bm_parts.append(f"PD-L1 {v}%")
+                        elif isinstance(v, bool):
+                            bm_parts.append(f"{k.upper()} {'+'  if v else '-'}")
+                        else:
+                            bm_parts.append(f"{k.upper()} {v}")
+                    patient_context_text += f", Biomarkers: {', '.join(bm_parts)}"
+                break
 
-        elif 'similar' in message_lower or 'case' in message_lower:
-            return "I can find similar cases from our database. Please describe the patient first, and I'll match them with similar cases."
+        messages = [
+            SystemMessage(content=CLINICAL_SYSTEM_PROMPT),
+            HumanMessage(content=f"""Context:
+{patient_context_text}
 
-        else:
-            return f"""I'm the LCA Assistant. I help with lung cancer treatment decisions.
+Recent conversation:
+{history_text}
 
-I noticed you asked: "{message}"
+User question: {message}
 
-For the best results, please describe a patient case with:
-- Age and sex
-- TNM stage
-- Histology type
-- Performance status
-- Any biomarker results (EGFR, ALK, PD-L1, etc.)
+Provide a helpful, evidence-based response. Use markdown formatting with headers and tables where appropriate. If this is a general question about lung cancer, provide comprehensive clinical guidance. If the user seems to want to analyze a patient, guide them to provide clinical details.""")
+        ]
 
-Example: "68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PS 1"
-"""
+        response = self.llm.invoke(messages)
+        return response.content
+
+    def _get_help_response(self) -> str:
+        """Return a comprehensive help response"""
+        return """## ConsensusCare - Lung Cancer Clinical Decision Support
+
+### What I Can Do
+
+| Capability | How to Use | Example |
+|-----------|-----------|---------|
+| **Patient Analysis** | Describe a patient case | "68M, stage IIIA adenocarcinoma, EGFR+, PS 1" |
+| **Treatment Guidelines** | Ask about specific scenarios | "What's first-line for stage IV NSCLC with PD-L1 80%?" |
+| **Biomarker Guidance** | Ask about testing/therapy | "When should EGFR testing be done?" |
+| **Drug Information** | Ask about specific agents | "What are osimertinib side effects?" |
+| **Similar Cases** | After analyzing a patient | "Find similar cases" |
+| **Clinical Trials** | After analyzing a patient | "Check clinical trial eligibility" |
+| **Graph Exploration** | Query the knowledge graph | "Show all stage IIIA patients" |
+
+### Quick Start Examples
+
+1. **Full patient analysis:**
+   > "68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PD-L1 45%, PS 1, COPD"
+
+2. **Guideline question:**
+   > "What does NCCN recommend for ALK-positive stage IV NSCLC?"
+
+3. **Biomarker query:**
+   > "Explain the significance of KRAS G12C mutation in NSCLC"
+
+### Follow-up Questions
+After any analysis, you can ask about alternatives, reasoning, prognosis, biomarkers, comorbidity interactions, or clinical trial eligibility."""
+
+    def _get_welcome_response(self, message: str) -> str:
+        """Return a contextual welcome/redirect response"""
+        return f"""## Welcome to ConsensusCare
+
+I'm your lung cancer clinical decision support assistant, powered by the LUCADA ontology and NICE/NCCN/ESMO guidelines.
+
+I noticed you asked: *"{message}"*
+
+To provide the best clinical guidance, I can help with:
+
+### Patient Case Analysis
+Describe a patient with clinical details:
+> **Example:** "68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del+, PS 1, COPD"
+
+### Clinical Questions
+Ask about guidelines, treatments, or biomarkers:
+> **Example:** "What is the first-line treatment for stage IV NSCLC with high PD-L1?"
+
+### System Capabilities
+- **10 guideline rules** (NICE CG121 + modern precision medicine)
+- **Multi-agent LangGraph workflow** (classification, biomarker analysis, conflict resolution)
+- **Neo4j knowledge graph** with decision traces and causal chains
+- **Ontology reasoning** with LUCADA OWL2 + SNOMED-CT
+
+Type `help` for full capabilities or describe a patient case to begin."""
 
     # =============================================================================
     # Enhanced Conversation Methods

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   Network,
   MessageSquare,
@@ -20,7 +20,6 @@ import {
   Layers
 } from 'lucide-react'
 import Link from 'next/link'
-import ChatInterface from '@/components/ChatInterface'
 import { ContextGraphView } from '@/components/ContextGraphView'
 import { SigmaGraph } from '@/components/SigmaGraph'
 import { CytoscapeGraph } from '@/components/CytoscapeGraph'
@@ -63,7 +62,7 @@ export default function ChatPage() {
 
   // Graph explorer state
   const [focusDepth, setFocusDepth] = useState(2)
-  const [nodeLimit, setNodeLimit] = useState(50)
+  const [nodeLimit, setNodeLimit] = useState(100)
   const [showFilters, setShowFilters] = useState(true)
   const [isLoadingGraph, setIsLoadingGraph] = useState(false)
   const [graphUpdateTime, setGraphUpdateTime] = useState<string | null>(null)
@@ -114,6 +113,13 @@ export default function ChatPage() {
     }, ...prev.slice(0, 49)])
   }, [])
 
+  // Update graph timestamp when data changes (from floating chat or manual load)
+  useEffect(() => {
+    if (graphData && graphData.nodes.length > 0) {
+      setGraphUpdateTime(new Date().toLocaleTimeString())
+    }
+  }, [graphData])
+
   // Load graph data
   const loadGraphData = useCallback(async () => {
     setIsLoadingGraph(true)
@@ -133,29 +139,6 @@ export default function ChatPage() {
       setIsLoadingGraph(false)
     }
   }, [focusDepth, nodeLimit, setGraphData, addActivity])
-
-  // Handle graph data changes from chat
-  const handleGraphDataChange = useCallback((data: GraphData) => {
-    console.log('[ChatPage] Graph data received:', data.nodes.length, 'nodes,', data.relationships.length, 'rels')
-    console.log('[ChatPage] Setting graph data in context...')
-    setGraphData(data)
-    setGraphUpdateTime(new Date().toLocaleTimeString())
-    addActivity('graph_update', 'Graph Visualized', `Displaying ${data.nodes.length} nodes and ${data.relationships.length} relationships in center panel`, 'success')
-
-    // Auto-show the right sidebar if it's collapsed when graph data arrives
-    if (!isRightSidebarOpen && data.nodes.length > 0) {
-      console.log('[ChatPage] Auto-opening right sidebar for graph data')
-    }
-  }, [setGraphData, addActivity, isRightSidebarOpen])
-
-  // Handle decision nodes changes
-  const handleDecisionNodesChange = useCallback((nodes: GraphNode[]) => {
-    console.log('[ChatPage] Decision nodes received:', nodes.length)
-    setDecisionNodes(nodes)
-    if (nodes.length > 0) {
-      addActivity('decision', 'Decisions Found', `${nodes.length} treatment decisions available`, 'success')
-    }
-  }, [setDecisionNodes, addActivity])
 
   // Handle decision node selection
   const handleDecisionSelect = useCallback((decision: TreatmentDecision | null) => {
@@ -400,9 +383,9 @@ export default function ChatPage() {
                 <div className="filter-control">
                   <input
                     type="range"
-                    min="10"
-                    max="200"
-                    step="10"
+                    min="50"
+                    max="500"
+                    step="50"
                     value={nodeLimit}
                     onChange={(e) => setNodeLimit(parseInt(e.target.value))}
                     className="filter-slider"
@@ -424,14 +407,34 @@ export default function ChatPage() {
             {graphType === 'sigma' ? (
               <SigmaGraph
                 data={graphData ? {
-                  nodes: graphData.nodes.map(n => ({
-                    id: n.id,
-                    label: n.properties?.name as string || n.properties?.treatment as string || n.id.split(':').pop() || n.id,
-                    type: n.labels[0],
-                    properties: n.properties,
-                    color: undefined,
-                    size: undefined
-                  })),
+                  nodes: graphData.nodes.map(n => {
+                    // Extract meaningful label from properties
+                    const props = n.properties || {}
+                    const label = 
+                      props.name as string ||
+                      props.treatment as string ||
+                      props.drug_name as string ||
+                      props.label as string ||
+                      props.title as string ||
+                      props.guideline_name as string ||
+                      props.test_name as string ||
+                      props.loinc_name as string ||
+                      props.concept_name as string ||
+                      props.description as string ||
+                      props.code as string ||
+                      (typeof props.id === 'string' ? props.id : null) ||
+                      n.id.split(':').pop() ||
+                      n.id
+                    
+                    return {
+                      id: n.id,
+                      label: String(label).substring(0, 50), // Limit length
+                      type: n.labels[0],
+                      properties: n.properties,
+                      color: undefined,
+                      size: undefined
+                    }
+                  }),
                   edges: graphData.relationships.map(r => ({
                     id: r.id,
                     source: r.startNodeId,
@@ -457,6 +460,82 @@ export default function ChatPage() {
             )}
           </div>
         </main>
+
+        {/* Right Sidebar */}
+        <aside className={`right-sidebar ${isRightSidebarOpen ? '' : 'collapsed'}`}>
+          {/* Sidebar Toggle */}
+          <button
+            onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+            className="sidebar-toggle right-toggle"
+            title={isRightSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {isRightSidebarOpen ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
+
+          {isRightSidebarOpen && (
+            <>
+              {/* Tab Navigation */}
+              <div className="sidebar-tabs">
+                <button
+                  onClick={() => handleRightTabClick('decisions')}
+                  className={`sidebar-tab ${activeRightTab === 'decisions' ? 'active' : ''}`}
+                  title="Treatment Decisions"
+                >
+                  <Shield className="w-4 h-4" />
+                  <span>Decisions</span>
+                </button>
+                <button
+                  onClick={() => handleRightTabClick('argumentation')}
+                  className={`sidebar-tab ${activeRightTab === 'argumentation' ? 'active' : ''}`}
+                  title="Clinical Argumentation"
+                >
+                  <ListTree className="w-4 h-4" />
+                  <span>Arguments</span>
+                </button>
+                <button
+                  onClick={() => handleRightTabClick('activity')}
+                  className={`sidebar-tab ${activeRightTab === 'activity' ? 'active' : ''}`}
+                  title="Activity Feed"
+                >
+                  <Activity className="w-4 h-4" />
+                  <span>Activity</span>
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="sidebar-content">
+                {/* Decision Trace Panel */}
+                <div style={{ display: activeRightTab === 'decisions' ? 'block' : 'none', height: '100%' }}>
+                  <DecisionTracePanel
+                    decision={selectedDecision}
+                    onDecisionSelect={handleDecisionSelect}
+                    graphDecisions={decisionNodes}
+                  />
+                </div>
+
+                {/* Argumentation View */}
+                <div style={{ display: activeRightTab === 'argumentation' ? 'block' : 'none', height: '100%' }}>
+                  {argumentationChain ? (
+                    <ArgumentationView chain={argumentationChain} />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-zinc-500 text-sm p-4 text-center">
+                      <div>
+                        <ListTree className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p>No argumentation chain available.</p>
+                        <p className="text-xs mt-1">Analyze a patient case or click a decision node to see clinical arguments.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Activity Feed */}
+                <div style={{ display: activeRightTab === 'activity' ? 'block' : 'none', height: '100%' }}>
+                  <ActivityFeed activities={activities} />
+                </div>
+              </div>
+            </>
+          )}
+        </aside>
       </div>
     </div>
   )

@@ -21,7 +21,7 @@ export default function MedicationListPanel({
   onAddMedication,
   onRefresh,
 }: MedicationListPanelProps) {
-  const [showInactiveopen, setShowInactive] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   const [selectedMed, setSelectedMed] = useState<Medication | null>(null);
 
   const activeMedications = medications.filter(

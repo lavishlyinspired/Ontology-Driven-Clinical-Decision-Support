@@ -255,6 +255,115 @@ async def update_configuration(
             "enabled": str(enabled),
             "message": f"Feature '{feature}' {'enabled' if enabled else 'disabled'}"
         }
-        
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ingest-clinical-data")
+async def ingest_clinical_data():
+    """
+    Seed Neo4j with clinical reference data.
+
+    Ingests:
+    - NCCN/NICE/ESMO guideline nodes
+    - Drug reference data (mechanisms, dosing, side effects)
+    - Biomarker-therapy mapping relationships
+    - Sample patient cohort (10 diverse cases)
+    - Clinical trial reference data (landmark trials)
+    - LUCADA ontology class hierarchy
+
+    Returns:
+        Ingestion counts by category
+    """
+    try:
+        from ...services.clinical_data_ingestor import ClinicalDataIngestor
+
+        ingestor = ClinicalDataIngestor()
+        if not ingestor.driver:
+            raise HTTPException(
+                status_code=503,
+                detail="Neo4j not available. Ensure database is running."
+            )
+
+        counts = ingestor.ingest_all()
+        ingestor.close()
+
+        return {
+            "status": "success",
+            "message": "Clinical data ingested successfully",
+            "counts": counts
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Clinical data ingestion failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/run-inference")
+async def run_inference(patient_id: Optional[str] = None):
+    """
+    Run ontology-based inference rules on the knowledge graph.
+
+    Inference rules:
+    - Cancer type classification (histology → NSCLC/SCLC subtype)
+    - Biomarker-therapy inference (actionable mutation → recommended therapy)
+    - Guideline applicability (stage/PS → applicable guidelines)
+    - Risk stratification (comorbidities + PS → risk level)
+    - Contraindication detection (comorbidity → contraindicated drugs)
+    - Stage grouping (TNM → early/locally advanced/metastatic)
+
+    Args:
+        patient_id: Optional - run for specific patient only
+
+    Returns:
+        Inference counts by rule type
+    """
+    try:
+        from ...db.neo4j_inference import Neo4jInferenceEngine
+
+        engine = Neo4jInferenceEngine()
+        if not engine.driver:
+            raise HTTPException(
+                status_code=503,
+                detail="Neo4j not available. Ensure database is running."
+            )
+
+        results = engine.run_all_inferences(patient_id)
+        engine.close()
+
+        return {
+            "status": "success",
+            "patient_id": patient_id or "all",
+            "inferences": results,
+            "total_inferred": sum(results.values())
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Inference failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/patient-inferences/{patient_id}")
+async def get_patient_inferences(patient_id: str):
+    """Get all inferred knowledge for a specific patient"""
+    try:
+        from ...db.neo4j_inference import Neo4jInferenceEngine
+
+        engine = Neo4jInferenceEngine()
+        if not engine.driver:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
+
+        inferences = engine.get_patient_inferences(patient_id)
+        engine.close()
+
+        return {
+            "patient_id": patient_id,
+            "inferences": inferences
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

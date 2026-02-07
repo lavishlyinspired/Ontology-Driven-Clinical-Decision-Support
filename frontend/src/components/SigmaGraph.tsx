@@ -99,6 +99,9 @@ export function SigmaGraph({
   const [camera, setCamera] = useState({ x: 0, y: 0, zoom: 1 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [draggedNode, setDraggedNode] = useState<string | null>(null)
+  const [showClustering, setShowClustering] = useState(false)
+  const [clusters, setClusters] = useState<Map<string, number>>(new Map())
 
   // Process graph data and apply layout
   useEffect(() => {
@@ -294,197 +297,6 @@ export function SigmaGraph({
     }
   }
 
-  // Render the graph
-  const render = useCallback(() => {
-    const canvas = canvasRef.current
-    const ctx = canvas?.getContext('2d')
-    if (!canvas || !ctx || processedNodes.size === 0) return
-
-    const { width: w, height: h } = canvas.getBoundingClientRect()
-    canvas.width = w * window.devicePixelRatio
-    canvas.height = h * window.devicePixelRatio
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
-
-    // Clear canvas
-    ctx.fillStyle = '#0d0d12'
-    ctx.fillRect(0, 0, w, h)
-
-    // Transform for camera
-    ctx.save()
-    ctx.translate(w / 2 + camera.x, h / 2 + camera.y)
-    ctx.scale(camera.zoom, camera.zoom)
-
-    // Draw edges
-    ctx.lineWidth = 1 / camera.zoom
-    processedEdges.forEach(edge => {
-      const source = processedNodes.get(edge.source)
-      const target = processedNodes.get(edge.target)
-      if (!source || !target) return
-
-      ctx.beginPath()
-      ctx.strokeStyle = edge.color || '#4B5563'
-      ctx.globalAlpha = hoveredNode
-        ? (edge.source === hoveredNode || edge.target === hoveredNode ? 1 : 0.2)
-        : 0.6
-      ctx.moveTo(source.x || 0, source.y || 0)
-      ctx.lineTo(target.x || 0, target.y || 0)
-      ctx.stroke()
-    })
-
-    ctx.globalAlpha = 1
-
-    // Draw nodes
-    processedNodes.forEach((node, nodeId) => {
-      const x = node.x || 0
-      const y = node.y || 0
-      const size = (node.size || 6) / camera.zoom
-      const isHovered = hoveredNode === nodeId
-      const isSelected = selectedNode === nodeId
-
-      // Node circle
-      ctx.beginPath()
-      ctx.arc(x, y, size * (isHovered ? 1.3 : 1), 0, Math.PI * 2)
-
-      // Fill
-      ctx.fillStyle = node.color || '#A0AEC0'
-      ctx.globalAlpha = hoveredNode && !isHovered ? 0.4 : 1
-      ctx.fill()
-
-      // Border for selected/hovered
-      if (isSelected || isHovered) {
-        ctx.strokeStyle = '#fff'
-        ctx.lineWidth = 2 / camera.zoom
-        ctx.stroke()
-      }
-
-      // Label
-      if (showLabels && (isHovered || camera.zoom > 0.8)) {
-        ctx.globalAlpha = 1
-        ctx.fillStyle = '#fff'
-        ctx.font = `${10 / camera.zoom}px sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'top'
-        ctx.fillText(node.label || node.id, x, y + size + 4 / camera.zoom)
-      }
-    })
-
-    ctx.restore()
-
-    // Draw legend
-    drawLegend(ctx, w, h)
-  }, [processedNodes, processedEdges, camera, hoveredNode, selectedNode, showLabels])
-
-  // Draw legend
-  const drawLegend = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    const types = Array.from(new Set(Array.from(processedNodes.values()).map(n => n.type || 'default')))
-    if (types.length === 0) return
-
-    const padding = 10
-    const itemHeight = 20
-    const legendHeight = types.length * itemHeight + padding * 2
-    const legendWidth = 120
-
-    ctx.fillStyle = 'rgba(24, 24, 27, 0.9)'
-    ctx.fillRect(w - legendWidth - padding, padding, legendWidth, legendHeight)
-
-    types.forEach((type, i) => {
-      const y = padding + padding + i * itemHeight
-      const color = nodeColorMap[type] || nodeColorMap.default || '#A0AEC0'
-
-      ctx.beginPath()
-      ctx.arc(w - legendWidth, y + 6, 5, 0, Math.PI * 2)
-      ctx.fillStyle = color
-      ctx.fill()
-
-      ctx.fillStyle = '#e4e4e7'
-      ctx.font = '11px sans-serif'
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(type, w - legendWidth + 12, y + 6)
-    })
-  }
-
-  // Re-render on state changes
-  useEffect(() => {
-    render()
-  }, [render])
-
-  // Handle mouse events
-  const getNodeAtPosition = useCallback((clientX: number, clientY: number): string | null => {
-    const canvas = canvasRef.current
-    if (!canvas) return null
-
-    const rect = canvas.getBoundingClientRect()
-    const x = (clientX - rect.left - rect.width / 2 - camera.x) / camera.zoom
-    const y = (clientY - rect.top - rect.height / 2 - camera.y) / camera.zoom
-
-    for (const [nodeId, node] of processedNodes) {
-      const dx = (node.x || 0) - x
-      const dy = (node.y || 0) - y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      const size = (node.size || 6) / camera.zoom
-
-      if (dist <= size * 1.5) {
-        return nodeId
-      }
-    }
-
-    return null
-  }, [processedNodes, camera])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isDragging && enablePan) {
-      const dx = e.clientX - dragStart.x
-      const dy = e.clientY - dragStart.y
-      setCamera(prev => ({
-        ...prev,
-        x: prev.x + dx,
-        y: prev.y + dy
-      }))
-      setDragStart({ x: e.clientX, y: e.clientY })
-    } else {
-      const nodeId = getNodeAtPosition(e.clientX, e.clientY)
-      setHoveredNode(nodeId)
-      onNodeHover?.(nodeId)
-    }
-  }, [isDragging, enablePan, dragStart, getNodeAtPosition, onNodeHover])
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    const nodeId = getNodeAtPosition(e.clientX, e.clientY)
-    if (nodeId) {
-      setSelectedNode(nodeId)
-      setFocusNodeId(nodeId)
-      setShowNodeDetails(true)
-      const node = processedNodes.get(nodeId)
-      if (node) {
-        onNodeClick?.(nodeId, node)
-      }
-    } else {
-      setIsDragging(true)
-      setDragStart({ x: e.clientX, y: e.clientY })
-    }
-  }, [getNodeAtPosition, processedNodes, onNodeClick])
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false)
-  }, [])
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!enableZoom) return
-    e.preventDefault()
-
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    setCamera(prev => ({
-      ...prev,
-      zoom: Math.max(0.1, Math.min(3, prev.zoom * delta))
-    }))
-  }, [enableZoom])
-
-  // Reset view
-  const resetView = useCallback(() => {
-    setCamera({ x: 0, y: 0, zoom: 1 })
-  }, [])
-
   // Get nodes within focus depth from a node
   const getNodesWithinDepth = useCallback((startNodeId: string, depth: number): Set<string> => {
     if (depth === 0) return new Set(Array.from(processedNodes.keys()))
@@ -562,6 +374,234 @@ export function SigmaGraph({
     return nodes
   }, [processedNodes, searchQuery, selectedTypes, minConnections, processedEdges, selectedRelationships, focusNodeId, focusDepth, getNodesWithinDepth])
 
+  // Render the graph
+  const render = useCallback(() => {
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx || processedNodes.size === 0) return
+
+    const { width: w, height: h } = canvas.getBoundingClientRect()
+    canvas.width = w * window.devicePixelRatio
+    canvas.height = h * window.devicePixelRatio
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+
+    // Clear canvas
+    ctx.fillStyle = '#0d0d12'
+    ctx.fillRect(0, 0, w, h)
+
+    // Transform for camera
+    ctx.save()
+    ctx.translate(w / 2 + camera.x, h / 2 + camera.y)
+    ctx.scale(camera.zoom, camera.zoom)
+
+    // Get filtered node IDs for rendering
+    const filteredNodeIds = new Set(filteredNodes.map(([id]) => id))
+
+    // Draw edges (only for filtered nodes)
+    ctx.lineWidth = 1 / camera.zoom
+    processedEdges.forEach(edge => {
+      const source = processedNodes.get(edge.source)
+      const target = processedNodes.get(edge.target)
+      if (!source || !target) return
+      
+      // Only draw edge if both nodes are in filtered set
+      if (!filteredNodeIds.has(edge.source) || !filteredNodeIds.has(edge.target)) return
+
+      ctx.beginPath()
+      ctx.strokeStyle = edge.color || '#4B5563'
+      ctx.globalAlpha = hoveredNode
+        ? (edge.source === hoveredNode || edge.target === hoveredNode ? 1 : 0.2)
+        : 0.6
+      ctx.moveTo(source.x || 0, source.y || 0)
+      ctx.lineTo(target.x || 0, target.y || 0)
+      ctx.stroke()
+    })
+
+    ctx.globalAlpha = 1
+
+    // Draw nodes (only filtered nodes)
+    filteredNodes.forEach(([nodeId, node]) => {
+      const x = node.x || 0
+      const y = node.y || 0
+      const size = (node.size || 6) / camera.zoom
+      const isHovered = hoveredNode === nodeId
+      const isSelected = selectedNode === nodeId
+      const isDragged = draggedNode === nodeId
+
+      // Node circle
+      ctx.beginPath()
+      ctx.arc(x, y, size * (isHovered || isDragged ? 1.3 : 1), 0, Math.PI * 2)
+
+      // Fill (with cluster color if clustering enabled)
+      if (showClustering && clusters.has(nodeId)) {
+        const clusterColors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e', '#22c55e']
+        ctx.fillStyle = clusterColors[clusters.get(nodeId)! % clusterColors.length]
+      } else {
+        ctx.fillStyle = node.color || '#A0AEC0'
+      }
+      ctx.globalAlpha = hoveredNode && !isHovered ? 0.4 : 1
+      ctx.fill()
+
+      // Border for selected/hovered/dragged
+      if (isSelected || isHovered || isDragged) {
+        ctx.strokeStyle = isDragged ? '#fbbf24' : '#fff'
+        ctx.lineWidth = 2 / camera.zoom
+        ctx.stroke()
+      }
+
+      // Label
+      if (showLabels && (isHovered || camera.zoom > 0.8)) {
+        ctx.globalAlpha = 1
+        ctx.fillStyle = '#fff'
+        ctx.font = `${10 / camera.zoom}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'top'
+        ctx.fillText(node.label || node.id, x, y + size + 4 / camera.zoom)
+      }
+    })
+
+    ctx.restore()
+
+    // Draw legend
+    drawLegend(ctx, w, h)
+  }, [processedNodes, processedEdges, camera, hoveredNode, selectedNode, showLabels, filteredNodes, draggedNode, showClustering, clusters])
+
+  // Draw legend
+  const drawLegend = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    const types = Array.from(new Set(Array.from(processedNodes.values()).map(n => n.type || 'default')))
+    if (types.length === 0) return
+
+    const padding = 10
+    const itemHeight = 20
+    const legendHeight = types.length * itemHeight + padding * 2
+    const legendWidth = 120
+
+    // Draw legend in bottom left corner
+    ctx.fillStyle = 'rgba(24, 24, 27, 0.9)'
+    ctx.fillRect(padding, h - legendHeight - padding, legendWidth, legendHeight)
+
+    types.forEach((type, i) => {
+      const y = h - legendHeight - padding + padding + i * itemHeight
+      const color = nodeColorMap[type] || nodeColorMap.default || '#A0AEC0'
+
+      ctx.beginPath()
+      ctx.arc(padding + 10, y + 6, 5, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+
+      ctx.fillStyle = '#e4e4e7'
+      ctx.font = '11px sans-serif'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(type, padding + 22, y + 6)
+    })
+  }
+
+  // Re-render on state changes
+  useEffect(() => {
+    render()
+  }, [render])
+
+  // Handle mouse events
+  const getNodeAtPosition = useCallback((clientX: number, clientY: number): string | null => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+
+    const rect = canvas.getBoundingClientRect()
+    const x = (clientX - rect.left - rect.width / 2 - camera.x) / camera.zoom
+    const y = (clientY - rect.top - rect.height / 2 - camera.y) / camera.zoom
+
+    for (const [nodeId, node] of processedNodes) {
+      const dx = (node.x || 0) - x
+      const dy = (node.y || 0) - y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const size = (node.size || 6) / camera.zoom
+
+      if (dist <= size * 1.5) {
+        return nodeId
+      }
+    }
+
+    return null
+  }, [processedNodes, camera])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (draggedNode) {
+      // Drag individual node
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      const x = (e.clientX - rect.left - rect.width / 2 - camera.x) / camera.zoom
+      const y = (e.clientY - rect.top - rect.height / 2 - camera.y) / camera.zoom
+      
+      setProcessedNodes(prev => {
+        const newMap = new Map(prev)
+        const node = newMap.get(draggedNode)
+        if (node) {
+          newMap.set(draggedNode, { ...node, x, y })
+        }
+        return newMap
+      })
+    } else if (isDragging && enablePan) {
+      // Pan camera
+      const dx = e.clientX - dragStart.x
+      const dy = e.clientY - dragStart.y
+      setCamera(prev => ({
+        ...prev,
+        x: prev.x + dx,
+        y: prev.y + dy
+      }))
+      setDragStart({ x: e.clientX, y: e.clientY })
+    } else {
+      const nodeId = getNodeAtPosition(e.clientX, e.clientY)
+      setHoveredNode(nodeId)
+      onNodeHover?.(nodeId)
+    }
+  }, [isDragging, enablePan, dragStart, getNodeAtPosition, onNodeHover, draggedNode, camera])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const nodeId = getNodeAtPosition(e.clientX, e.clientY)
+    if (nodeId) {
+      if (e.shiftKey) {
+        // Shift+click to drag node
+        setDraggedNode(nodeId)
+      } else {
+        // Regular click to select
+        setSelectedNode(nodeId)
+        setFocusNodeId(nodeId)
+        setShowNodeDetails(true)
+        const node = processedNodes.get(nodeId)
+        if (node) {
+          onNodeClick?.(nodeId, node)
+        }
+      }
+    } else {
+      setIsDragging(true)
+      setDragStart({ x: e.clientX, y: e.clientY })
+    }
+  }, [getNodeAtPosition, processedNodes, onNodeClick])
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false)
+    setDraggedNode(null)
+  }, [])
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (!enableZoom) return
+    e.preventDefault()
+
+    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    setCamera(prev => ({
+      ...prev,
+      zoom: Math.max(0.1, Math.min(3, prev.zoom * delta))
+    }))
+  }, [enableZoom])
+
+  // Reset view
+  const resetView = useCallback(() => {
+    setCamera({ x: 0, y: 0, zoom: 1 })
+  }, [])
+
   // Get unique node types
   const nodeTypes = React.useMemo(() => {
     const types = new Set<string>()
@@ -615,6 +655,77 @@ export function SigmaGraph({
     setFocusDepth(0)
     setFocusNodeId(null)
   }
+
+  // Simple community detection using Louvain-like algorithm
+  const detectClusters = useCallback(() => {
+    const nodeIds = Array.from(processedNodes.keys())
+    const clusterMap = new Map<string, number>()
+    
+    // Initialize: each node in its own cluster
+    nodeIds.forEach((id, idx) => clusterMap.set(id, idx))
+    
+    // Build adjacency list
+    const adjacency = new Map<string, Set<string>>()
+    nodeIds.forEach(id => adjacency.set(id, new Set()))
+    processedEdges.forEach(edge => {
+      adjacency.get(edge.source)?.add(edge.target)
+      adjacency.get(edge.target)?.add(edge.source)
+    })
+    
+    // Iterative merging based on modularity
+    let changed = true
+    let iterations = 0
+    const maxIterations = 20
+    
+    while (changed && iterations < maxIterations) {
+      changed = false
+      iterations++
+      
+      nodeIds.forEach(nodeId => {
+        const neighbors = adjacency.get(nodeId) || new Set()
+        if (neighbors.size === 0) return
+        
+        // Find most common cluster among neighbors
+        const clusterCounts = new Map<number, number>()
+        neighbors.forEach(neighborId => {
+          const cluster = clusterMap.get(neighborId)
+          if (cluster !== undefined) {
+            clusterCounts.set(cluster, (clusterCounts.get(cluster) || 0) + 1)
+          }
+        })
+        
+        if (clusterCounts.size === 0) return
+        
+        // Get cluster with max count
+        let maxCluster = clusterMap.get(nodeId)!
+        let maxCount = 0
+        clusterCounts.forEach((count, cluster) => {
+          if (count > maxCount) {
+            maxCount = count
+            maxCluster = cluster
+          }
+        })
+        
+        // Update if better cluster found
+        if (maxCluster !== clusterMap.get(nodeId)) {
+          clusterMap.set(nodeId, maxCluster)
+          changed = true
+        }
+      })
+    }
+    
+    // Renumber clusters to be consecutive starting from 0
+    const uniqueClusters = Array.from(new Set(clusterMap.values()))
+    const clusterMapping = new Map(uniqueClusters.map((c, i) => [c, i]))
+    const finalClusters = new Map<string, number>()
+    clusterMap.forEach((cluster, nodeId) => {
+      finalClusters.set(nodeId, clusterMapping.get(cluster)!)
+    })
+    
+    setClusters(finalClusters)
+    setShowClustering(true)
+    console.log(`[Clustering] Detected ${uniqueClusters.length} clusters in ${iterations} iterations`)
+  }, [processedNodes, processedEdges])
 
   // Export graph as PNG
   const exportAsPNG = useCallback(() => {
@@ -824,6 +935,33 @@ export function SigmaGraph({
                   </p>
                 </div>
 
+                {/* Clustering */}
+                <div>
+                  <label className="text-xs text-zinc-500 mb-1.5 block">Community Detection</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={detectClusters}
+                      className="flex-1 py-1.5 px-3 bg-violet-600 hover:bg-violet-500 border border-violet-500 rounded text-xs text-white transition-colors"
+                    >
+                      Detect Clusters
+                    </button>
+                    {showClustering && (
+                      <button
+                        onClick={() => setShowClustering(false)}
+                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-xs text-zinc-300 transition-colors"
+                        title="Hide clustering"
+                      >
+                        Hide
+                      </button>
+                    )}
+                  </div>
+                  {showClustering && (
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {new Set(clusters.values()).size} clusters detected
+                    </p>
+                  )}
+                </div>
+
                 {/* Clear filters */}
                 {(searchQuery || selectedTypes.size > 0 || minConnections > 0 || selectedRelationships.size > 0 || focusDepth > 0) && (
                   <button
@@ -917,8 +1055,8 @@ export function SigmaGraph({
         onWheel={handleWheel}
       />
 
-      {/* Top Toolbar */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+      {/* Top Toolbar - centered left */}
+      <div className="absolute top-4 left-[20%] flex items-center gap-2 z-10">
         {/* Layout Selector */}
         <select
           value={currentLayout}
@@ -979,9 +1117,9 @@ export function SigmaGraph({
         </button>
       </div>
 
-      {/* Statistics Panel */}
+      {/* Statistics Panel - centered left */}
       {showStats && graphStats && (
-        <div className="absolute top-20 right-4 w-64 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-lg shadow-xl p-4 z-10">
+        <div className="absolute top-20 left-[20%] w-64 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-lg shadow-xl p-4 z-10">
           <h3 className="text-sm font-semibold text-zinc-100 mb-3 flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1048,9 +1186,12 @@ export function SigmaGraph({
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="absolute bottom-4 left-4 text-xs text-zinc-500">
-        {processedNodes.size} nodes | {processedEdges.length} edges | {Math.round(camera.zoom * 100)}%
+      {/* Stats - moved to right to avoid legend overlap */}
+      <div className="absolute bottom-4 right-4 text-xs text-zinc-500 bg-zinc-900/80 px-3 py-1.5 rounded-lg backdrop-blur-sm">
+        <div>Showing {filteredNodes.length} of {processedNodes.size} nodes</div>
+        <div>{processedEdges.length} edges | {Math.round(camera.zoom * 100)}% zoom</div>
+        {showClustering && <div>{new Set(clusters.values()).size} clusters</div>}
+        <div className="text-zinc-600 mt-1">Shift+drag to move nodes</div>
       </div>
 
       {/* Node Details Panel */}

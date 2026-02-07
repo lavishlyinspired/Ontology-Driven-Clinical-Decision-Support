@@ -53,14 +53,54 @@ export default function ContextGraphPanel() {
               <div className="graph-container">
                 <SigmaGraph
                   data={{
-                    nodes: graphData.nodes.map(n => ({
-                      id: n.id,
-                      label: n.properties?.name as string || n.properties?.treatment as string || n.id.split(':').pop() || n.id,
-                      type: n.labels[0],
-                      properties: n.properties,
-                      color: undefined,
-                      size: undefined
-                    })),
+                    nodes: graphData.nodes.map(n => {
+                      // Extract meaningful label from properties
+                      const props = n.properties || {}
+                      const nodeType = n.labels[0] || ''
+                      
+                      // Special handling for Inference nodes
+                      let label: string
+                      if (nodeType.includes('Inference') || nodeType === 'CancerClassification' || nodeType === 'TherapyInference') {
+                        label = 
+                          props.cancer_subtype as string || // e.g., "NSCLC_Adenocarcinoma"
+                          props.therapy_class as string ||   // e.g., "EGFR_TKI"
+                          props.inference_type as string ||
+                          `Inference: ${props.rule || 'Unknown'}`
+                      } else if (nodeType === 'Patient' || nodeType === 'Diagnosis') {
+                        // Include histology for Patient/Diagnosis nodes
+                        const histology = props.histology_type as string
+                        const patientName = props.name as string
+                        label = histology 
+                          ? (patientName ? `${patientName} (${histology})` : histology)
+                          : (patientName || n.id.split(':').pop() || n.id)
+                      } else {
+                        // Standard label extraction
+                        label = 
+                          props.name as string ||
+                          props.treatment as string ||
+                          props.drug_name as string ||
+                          props.label as string ||
+                          props.title as string ||
+                          props.guideline_name as string ||
+                          props.test_name as string ||
+                          props.loinc_name as string ||
+                          props.concept_name as string ||
+                          props.description as string ||
+                          props.code as string ||
+                          (typeof props.id === 'string' ? props.id : null) ||
+                          n.id.split(':').pop() ||
+                          n.id
+                      }
+                      
+                      return {
+                        id: n.id,
+                        label: String(label).substring(0, 50), // Limit length
+                        type: n.labels[0],
+                        properties: n.properties,
+                        color: undefined,
+                        size: undefined
+                      }
+                    }),
                     edges: graphData.relationships.map(r => ({
                       id: r.id,
                       source: r.startNodeId,

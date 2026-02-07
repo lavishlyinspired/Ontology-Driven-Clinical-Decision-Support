@@ -175,6 +175,7 @@ class LCAContextGraphClient:
             result = session.run(
                 """
                 MATCH (p:Patient {patient_id: $patient_id})
+                WITH p LIMIT 1
                 OPTIONAL MATCH (p)-[:HAS_BIOMARKER]->(b:Biomarker)
                 OPTIONAL MATCH (p)-[:HAS_COMORBIDITY]->(c:Comorbidity)
                 RETURN p {
@@ -355,6 +356,7 @@ class LCAContextGraphClient:
             result = session.run(
                 """
                 MATCH (d:TreatmentDecision {id: $decision_id})
+                WITH d LIMIT 1
                 OPTIONAL MATCH (d)-[:ABOUT]->(patient:Patient)
                 OPTIONAL MATCH (d)-[:APPLIED_GUIDELINE]->(guideline:Guideline)
                 OPTIONAL MATCH (d)-[:BASED_ON]->(biomarker:Biomarker)
@@ -528,11 +530,10 @@ class LCAContextGraphClient:
                     {"center_id": center_node_id, "limit": limit},
                 )
             else:
-                # Get a sample of the graph
+                # Get a sample of the graph - ALL nodes (not filtered by type)
                 result = session.run(
                     """
                     MATCH (n)
-                    WHERE n:Patient OR n:TreatmentDecision OR n:Biomarker OR n:Guideline
                     WITH n LIMIT $limit
                     OPTIONAL MATCH (n)-[r]-(m)
                     WITH collect(DISTINCT n) + collect(DISTINCT m) AS nodes,
@@ -588,6 +589,7 @@ class LCAContextGraphClient:
                 WHERE center.patient_id = $node_id
                    OR center.id = $node_id
                    OR elementId(center) = $node_id
+                WITH center LIMIT 1
                 OPTIONAL MATCH (center)-[r]-(connected)
                 WITH center, collect(DISTINCT connected)[0..$limit] AS connectedNodes,
                      collect(DISTINCT r) AS rels
