@@ -38,6 +38,7 @@ class Neo4jInferenceEngine:
     def __init__(self, driver=None, database: str = "neo4j"):
         self.driver = driver
         self.database = database
+        self._snomed_loaded: Optional[bool] = None  # cached check
 
         if not self.driver:
             uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -52,6 +53,28 @@ class Neo4jInferenceEngine:
         if self.driver:
             self.driver.close()
 
+    def _check_snomed_loaded(self) -> bool:
+        """Check if SNOMEDConcept nodes exist in Neo4j (cached)."""
+        if self._snomed_loaded is not None:
+            return self._snomed_loaded
+
+        if not self.driver:
+            self._snomed_loaded = False
+            return False
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                result = session.run(
+                    "MATCH (c:SNOMEDConcept) RETURN count(c) > 0 AS loaded LIMIT 1"
+                )
+                record = result.single()
+                self._snomed_loaded = record["loaded"] if record else False
+        except Exception:
+            self._snomed_loaded = False
+
+        logger.info(f"SNOMED loaded in Neo4j: {self._snomed_loaded}")
+        return self._snomed_loaded
+
     def run_all_inferences(self, patient_id: Optional[str] = None) -> Dict[str, int]:
         """Run all inference rules, optionally for a specific patient"""
         results = {}
@@ -64,10 +87,69 @@ class Neo4jInferenceEngine:
         return results
 
     def _infer_cancer_type_classification(self, patient_id: Optional[str] = None) -> int:
-        """Classify patients into NSCLC/SCLC subtypes based on histology"""
+        """Classify patients into NSCLC/SCLC subtypes based on histology.
+
+        Dual-mode: uses SNOMED graph traversal if SNOMEDConcept nodes are loaded,
+        otherwise falls back to string-matching CASE WHEN.
+        """
         if not self.driver:
             return 0
 
+        if self._check_snomed_loaded():
+            return self._infer_cancer_type_via_snomed(patient_id)
+        return self._infer_cancer_type_via_string(patient_id)
+
+    def _infer_cancer_type_via_snomed(self, patient_id: Optional[str] = None) -> int:
+        """SNOMED graph-based cancer classification using IS_A hierarchy."""
+        patient_filter = "WHERE p.patient_id = $patient_id" if patient_id else ""
+        params = {"patient_id": patient_id} if patient_id else {}
+
+        # 254637007 = NSCLC, 254632001 = SCLC
+        query = f"""
+        MATCH (p:Patient)
+        {patient_filter}
+        OPTIONAL MATCH (h:SNOMEDConcept)
+            WHERE toLower(h.fsn) CONTAINS toLower(p.histology_type)
+        WITH p, h
+        OPTIONAL MATCH (h)-[:IS_A*0..5]->(nsclc:SNOMEDConcept {{sctid: '254637007'}})
+        OPTIONAL MATCH (h)-[:IS_A*0..5]->(sclc:SNOMEDConcept {{sctid: '254632001'}})
+        WITH p, h,
+             CASE
+                WHEN nsclc IS NOT NULL AND h.fsn CONTAINS 'denocarcinoma' THEN 'NSCLC_Adenocarcinoma'
+                WHEN nsclc IS NOT NULL AND h.fsn CONTAINS 'quamous' THEN 'NSCLC_Squamous'
+                WHEN nsclc IS NOT NULL AND h.fsn CONTAINS 'arge cell' THEN 'NSCLC_LargeCell'
+                WHEN nsclc IS NOT NULL THEN 'NSCLC_NOS'
+                WHEN sclc IS NOT NULL THEN 'SCLC'
+                ELSE 'Unknown'
+             END AS cancer_subtype,
+             CASE
+                WHEN sclc IS NOT NULL THEN 'SCLC'
+                WHEN nsclc IS NOT NULL THEN 'NSCLC'
+                ELSE 'Unknown'
+             END AS cancer_category
+        MERGE (cls:Inference:CancerClassification {{patient_id: p.patient_id}})
+        SET cls.cancer_subtype = cancer_subtype,
+            cls.cancer_category = cancer_category,
+            cls.snomed_concept = CASE WHEN h IS NOT NULL THEN h.sctid ELSE null END,
+            cls.inferred_at = datetime(),
+            cls.rule = 'snomed_graph_classification'
+        MERGE (p)-[:HAS_CLASSIFICATION]->(cls)
+        RETURN count(cls) AS inferred
+        """
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                result = session.run(query, params)
+                record = result.single()
+                count = record["inferred"] if record else 0
+                logger.info(f"SNOMED graph classification: {count} patients classified")
+                return count
+        except Exception as e:
+            logger.warning(f"SNOMED graph classification failed, falling back to string: {e}")
+            return self._infer_cancer_type_via_string(patient_id)
+
+    def _infer_cancer_type_via_string(self, patient_id: Optional[str] = None) -> int:
+        """Original string-matching cancer classification (fallback)."""
         patient_filter = "WHERE p.patient_id = $patient_id" if patient_id else ""
         params = {"patient_id": patient_id} if patient_id else {}
 
@@ -106,10 +188,81 @@ class Neo4jInferenceEngine:
             return record["inferred"] if record else 0
 
     def _infer_biomarker_therapy_links(self, patient_id: Optional[str] = None) -> int:
-        """Infer recommended therapies based on patient biomarker profile"""
+        """Infer recommended therapies based on patient biomarker profile.
+
+        Dual-mode: if SNOMED loaded, augments inference with graph-based
+        BiomarkerTherapyMap nodes; otherwise uses string-match CASE WHEN.
+        """
         if not self.driver:
             return 0
 
+        if self._check_snomed_loaded():
+            return self._infer_biomarker_therapy_via_graph(patient_id)
+        return self._infer_biomarker_therapy_via_string(patient_id)
+
+    def _infer_biomarker_therapy_via_graph(self, patient_id: Optional[str] = None) -> int:
+        """Graph-based biomarker-therapy inference using BiomarkerTherapyMap nodes."""
+        patient_filter = "WHERE p.patient_id = $patient_id" if patient_id else ""
+        params = {"patient_id": patient_id} if patient_id else {}
+
+        # Try to match via graph BiomarkerTherapyMap nodes first,
+        # then fall back to string matching for any unmatched biomarkers
+        query = f"""
+        MATCH (p:Patient)-[:HAS_BIOMARKER]->(b:Biomarker)
+        {patient_filter}
+        OPTIONAL MATCH (btm:BiomarkerTherapyMap)
+            WHERE toLower(b.marker_type) CONTAINS toLower(btm.biomarker)
+        WITH p, b,
+             CASE
+                // Graph-based: use BiomarkerTherapyMap if matched
+                WHEN btm IS NOT NULL AND
+                     (toLower(b.value) CONTAINS 'positive' OR toLower(b.value) = 'true'
+                      OR toLower(b.value) CONTAINS btm.biomarker)
+                THEN btm.therapy_class
+                // String-match fallback for PDL1 (percentage-based)
+                WHEN toLower(b.marker_type) CONTAINS 'pdl1' AND
+                     toFloat(replace(b.value, '%', '')) >= 50
+                THEN 'IO_MONOTHERAPY'
+                WHEN toLower(b.marker_type) CONTAINS 'pdl1' AND
+                     toFloat(replace(b.value, '%', '')) >= 1 AND
+                     toFloat(replace(b.value, '%', '')) < 50
+                THEN 'CHEMO_IO_COMBINATION'
+                // String-match for KRAS/BRAF variants
+                WHEN toLower(b.marker_type) CONTAINS 'kras' AND
+                     toLower(b.value) CONTAINS 'g12c'
+                THEN 'KRAS_G12C_INHIBITOR'
+                WHEN toLower(b.marker_type) CONTAINS 'braf' AND
+                     toLower(b.value) CONTAINS 'v600e'
+                THEN 'BRAF_MEK_COMBINATION'
+                ELSE NULL
+             END AS inferred_therapy_class
+        WHERE inferred_therapy_class IS NOT NULL
+        MERGE (inf:Inference:TherapyInference {{
+            patient_id: p.patient_id,
+            biomarker: b.marker_type
+        }})
+        SET inf.therapy_class = inferred_therapy_class,
+            inf.biomarker_value = b.value,
+            inf.inferred_at = datetime(),
+            inf.rule = 'snomed_biomarker_therapy_inference'
+        MERGE (b)-[:INDICATES]->(inf)
+        MERGE (p)-[:HAS_THERAPY_INFERENCE]->(inf)
+        RETURN count(inf) AS inferred
+        """
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                result = session.run(query, params)
+                record = result.single()
+                count = record["inferred"] if record else 0
+                logger.info(f"Graph biomarker-therapy inference: {count} inferences")
+                return count
+        except Exception as e:
+            logger.warning(f"Graph biomarker-therapy failed, falling back to string: {e}")
+            return self._infer_biomarker_therapy_via_string(patient_id)
+
+    def _infer_biomarker_therapy_via_string(self, patient_id: Optional[str] = None) -> int:
+        """Original string-matching biomarker-therapy inference (fallback)."""
         patient_filter = "WHERE p.patient_id = $patient_id" if patient_id else ""
         params = {"patient_id": patient_id} if patient_id else {}
 

@@ -399,10 +399,8 @@ class LOINCService:
         Args:
             loinc_path: Path to the LOINC data directory
         """
-        self.loinc_path = loinc_path or os.path.join(
-            os.path.dirname(__file__), 
-            "../../../data/lca_ontologies/loinc/Loinc_2.81"
-        )
+        from ..config import LCAConfig
+        self.loinc_path = loinc_path or LCAConfig.LOINC_PATH
         self._loinc_cache: Dict[str, LOINCCode] = {}
         self._loaded = False
     

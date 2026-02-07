@@ -36,6 +36,30 @@ class LCAConfig:
         str(ONTOLOGY_DIR / "snomed_ct" / "build_snonmed_owl" / "snomed_ct_optimized.owl")
     )
 
+    # SNOMED RF2 Snapshot directory (tab-delimited concept/description/relationship files)
+    SNOMED_RF2_PATH = os.getenv(
+        "SNOMED_RF2_PATH",
+        str(ONTOLOGY_DIR / "snomed_ct" / "SnomedCT_InternationalRF2_PRODUCTION_20260101T120000Z" / "Snapshot" / "Terminology")
+    )
+
+    # SNOMED Turtle (converted via ROBOT)
+    SNOMED_TTL_PATH = os.getenv(
+        "SNOMED_TTL_PATH",
+        str(ONTOLOGY_DIR / "snomed_ct" / "robot" / "snomed_ct_optimized.ttl")
+    )
+
+    # SHACL shapes for ontology validation
+    SHACL_SHAPES_PATH = os.getenv(
+        "SHACL_SHAPES_PATH",
+        str(ONTOLOGY_DIR / "shacl" / "oncology_shapes.ttl")
+    )
+
+    # NCI Thesaurus OWL
+    NCIT_OWL_PATH = os.getenv(
+        "NCIT_OWL_PATH",
+        str(ONTOLOGY_DIR / "ncit" / "ncit.owl")
+    )
+
     LOINC_PATH = os.getenv(
         "LOINC_PATH",
         str(ONTOLOGY_DIR / "loinc" / "Loinc_2.81")
@@ -44,6 +68,12 @@ class LCAConfig:
     RXNORM_PATH = os.getenv(
         "RXNORM_PATH",
         str(ONTOLOGY_DIR / "rxnorm" / "RxNorm_full_01052026")
+    )
+
+    # UMLS MRCONSO.RRF for crosswalk
+    UMLS_PATH = os.getenv(
+        "UMLS_PATH",
+        str(ONTOLOGY_DIR / "umls" / "META")
     )
 
     LUCADA_ONTOLOGY_OUTPUT = os.getenv(
@@ -94,6 +124,22 @@ class LCAConfig:
                 "path": cls.SNOMED_CT_PATH,
                 "exists": Path(cls.SNOMED_CT_PATH).exists()
             },
+            "SNOMED_RF2": {
+                "path": cls.SNOMED_RF2_PATH,
+                "exists": Path(cls.SNOMED_RF2_PATH).exists()
+            },
+            "SNOMED_TTL": {
+                "path": cls.SNOMED_TTL_PATH,
+                "exists": Path(cls.SNOMED_TTL_PATH).exists()
+            },
+            "SHACL_SHAPES": {
+                "path": cls.SHACL_SHAPES_PATH,
+                "exists": Path(cls.SHACL_SHAPES_PATH).exists()
+            },
+            "NCIT_OWL": {
+                "path": cls.NCIT_OWL_PATH,
+                "exists": Path(cls.NCIT_OWL_PATH).exists()
+            },
             "LOINC": {
                 "path": cls.LOINC_PATH,
                 "exists": Path(cls.LOINC_PATH).exists()
@@ -105,6 +151,10 @@ class LCAConfig:
             "LUCADA_OUTPUT": {
                 "path": cls.LUCADA_ONTOLOGY_OUTPUT,
                 "exists": Path(cls.LUCADA_ONTOLOGY_OUTPUT).exists()
+            },
+            "UMLS": {
+                "path": cls.UMLS_PATH,
+                "exists": Path(cls.UMLS_PATH).exists()
             }
         }
         return results

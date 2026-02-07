@@ -260,6 +260,110 @@ async def update_configuration(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/load-ontologies")
+async def load_ontologies(subset_only: bool = True):
+    """
+    Load SNOMED-CT RF2 data and SHACL shapes into Neo4j.
+
+    Args:
+        subset_only: If True (default), load only lung-cancer-relevant
+                     SNOMED subset (~5000 concepts). If False, load all (~400K).
+
+    Returns:
+        Load statistics (concept/relationship counts).
+    """
+    try:
+        from ...services.ontology_loader_service import OntologyLoaderService
+
+        loader = OntologyLoaderService()
+        if not loader._available:
+            raise HTTPException(
+                status_code=503,
+                detail="Neo4j not available. Ensure database is running."
+            )
+
+        # Load SNOMED RF2
+        snomed_result = loader.load_snomed_rf2(subset_only=subset_only)
+
+        # Load NCIt subset (Neoplasm, Drug, Gene hierarchies)
+        ncit_result = loader.load_ncit_subset()
+
+        # Attempt SHACL shapes (requires n10s plugin)
+        shacl_result = loader.load_shacl_shapes()
+
+        # Invalidate cached Text2Cypher schema so it rebuilds with new ontology nodes
+        try:
+            from ...services.conversation_service import ConversationService
+            ConversationService._dynamic_schema_cache = None
+            ConversationService._dynamic_schema_timestamp = None
+        except Exception:
+            pass  # conversation service may not be imported yet
+
+        loader.close()
+
+        return {
+            "status": "success",
+            "snomed": snomed_result,
+            "ncit": ncit_result,
+            "shacl": shacl_result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ontology loading failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ontology-status")
+async def get_ontology_status():
+    """
+    Returns counts of loaded SNOMED concepts, relationships, and n10s classes.
+    """
+    try:
+        from ...services.ontology_loader_service import OntologyLoaderService
+
+        loader = OntologyLoaderService()
+        status = loader.get_load_status()
+        loader.close()
+
+        return status
+    except Exception as e:
+        logger.error(f"Ontology status check failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/validate-shacl")
+async def validate_shacl(focus_label: Optional[str] = None):
+    """
+    Run SHACL validation on the Neo4j graph.
+
+    Args:
+        focus_label: Optional node label to restrict validation scope.
+
+    Returns:
+        Validation results with any violations found.
+    """
+    try:
+        from ...services.ontology_loader_service import OntologyLoaderService
+
+        loader = OntologyLoaderService()
+        if not loader._available:
+            raise HTTPException(
+                status_code=503,
+                detail="Neo4j not available. Ensure database is running."
+            )
+
+        result = loader.validate_with_shacl(focus_label)
+        loader.close()
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"SHACL validation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/ingest-clinical-data")
 async def ingest_clinical_data():
     """
@@ -343,6 +447,54 @@ async def run_inference(patient_id: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Inference failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/crosswalk/{source_vocab}/{code}/{target_vocab}")
+async def get_crosswalk(source_vocab: str, code: str, target_vocab: str):
+    """
+    Translate a concept code between vocabularies using UMLS crosswalk.
+
+    Supported vocabularies: SNOMEDCT_US, LNC, RXNORM, NCI
+
+    Args:
+        source_vocab: Source vocabulary (e.g. SNOMEDCT_US)
+        code: Source concept code (e.g. 254637007)
+        target_vocab: Target vocabulary (e.g. NCI)
+
+    Returns:
+        Translated code or null if no mapping found.
+    """
+    try:
+        from ...services.umls_crosswalk_service import get_crosswalk_service
+
+        svc = get_crosswalk_service()
+        if not svc.loaded:
+            result = svc.load()
+            if not result.get("success"):
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"UMLS crosswalk not available: {result.get('message', 'load failed')}"
+                )
+
+        target_code = svc.get_crosswalk(source_vocab, code, target_vocab)
+        all_mappings = {}
+        cui = svc._code_to_cui.get((source_vocab, code))
+        if cui:
+            all_mappings = svc.get_all_mappings(cui)
+
+        return {
+            "source_vocab": source_vocab,
+            "source_code": code,
+            "target_vocab": target_vocab,
+            "target_code": target_code,
+            "cui": cui,
+            "all_mappings": all_mappings,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Crosswalk lookup failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

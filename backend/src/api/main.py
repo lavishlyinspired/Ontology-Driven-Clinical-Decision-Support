@@ -81,7 +81,9 @@ from src.api.routes import (
     graph_router,
     chat_graph_router,
     ontology_router,
-    graph_algorithms_router
+    graph_algorithms_router,
+    sparql_router,
+    fhir_terminology_router
 )
 
 # Import new medical services routers (2026-02)
@@ -240,6 +242,8 @@ app.include_router(graph_router, prefix="/api")  # Graph visualization endpoints
 app.include_router(chat_graph_router, prefix="/api")  # Enhanced chat with graph integration
 app.include_router(ontology_router, prefix="/api/v1")  # Ontology lookup and validation
 app.include_router(graph_algorithms_router, prefix="/api/v1")  # Neo4j graph algorithms
+app.include_router(sparql_router, prefix="/api/v1")  # SPARQL endpoint via n10s
+app.include_router(fhir_terminology_router, prefix="/api/v1")  # FHIR terminology operations
 
 # NEW: Medical services routers (2026-02)
 app.include_router(laboratory_router, prefix="/api/v1/laboratory", tags=["laboratory"])  # LOINC lab interpretation

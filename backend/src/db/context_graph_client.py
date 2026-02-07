@@ -344,7 +344,39 @@ class LCAContextGraphClient:
                     {"decision_id": decision_id, "precedent_id": precedent_id},
                 )
 
-        logger.info(f"[ContextGraphClient] Decision {decision_id} recorded successfully")
+            # Create PROV-O provenance record
+            prov_id = str(uuid.uuid4())
+            session.run(
+                """
+                CREATE (prov:ProvenanceRecord {
+                    id: $prov_id,
+                    activity: $activity,
+                    agent: $agent_name,
+                    entity: $decision_id,
+                    started_at: datetime(),
+                    ended_at: datetime()
+                })
+                WITH prov
+                MATCH (d:TreatmentDecision {id: $decision_id})
+                SET d.prov_generated_at = datetime(),
+                    d.prov_was_derived_from = $patient_id,
+                    d.prov_was_attributed_to = $agent_name
+                MERGE (d)-[:PROV_WAS_GENERATED_BY]->(prov)
+                """,
+                {
+                    "prov_id": prov_id,
+                    "activity": f"decision_{decision_type}",
+                    "agent_name": agent_name or "system",
+                    "decision_id": decision_id,
+                    "patient_id": patient_id or "",
+                },
+            )
+
+        # Ontology enrichment: link patient to ontology class if available
+        if patient_id:
+            self._enrich_with_ontology(patient_id, "Patient")
+
+        logger.info(f"[ContextGraphClient] Decision {decision_id} recorded with PROV-O provenance")
         return decision_id
 
     def get_decision(self, decision_id: str) -> Optional[Dict]:
@@ -375,6 +407,41 @@ class LCAContextGraphClient:
             )
             record = result.single()
             return convert_node_properties(record["decision"]) if record else None
+
+    def get_provenance_chain(self, decision_id: str) -> Dict:
+        """
+        Get the PROV-O provenance chain for a treatment decision.
+
+        Returns provenance records linked via PROV_WAS_GENERATED_BY,
+        plus the decision's prov_was_derived_from and prov_was_attributed_to.
+        """
+        if not self.driver:
+            return {"decision_id": decision_id, "provenance": []}
+
+        with self.driver.session(database=self.database) as session:
+            result = session.run(
+                """
+                MATCH (d:TreatmentDecision {id: $decision_id})
+                OPTIONAL MATCH (d)-[:PROV_WAS_GENERATED_BY]->(prov:ProvenanceRecord)
+                RETURN d {
+                    .id, .decision_type, .treatment,
+                    .prov_generated_at, .prov_was_derived_from, .prov_was_attributed_to
+                } AS decision,
+                collect(prov {.*}) AS provenance_records
+                """,
+                {"decision_id": decision_id},
+            )
+            record = result.single()
+            if not record:
+                return {"decision_id": decision_id, "provenance": []}
+
+            return {
+                "decision_id": decision_id,
+                "decision": convert_node_properties(record["decision"]),
+                "provenance_records": [
+                    convert_node_properties(p) for p in record["provenance_records"]
+                ],
+            }
 
     def get_causal_chain(
         self,
@@ -466,6 +533,98 @@ class LCAContextGraphClient:
                 {"decision_id": decision_id, "limit": limit},
             )
             return [convert_node_properties(record["decision"]) for record in result]
+
+    # ============================================
+    # ONTOLOGY ENRICHMENT
+    # ============================================
+
+    def _enrich_with_ontology(self, node_id: str, node_label: str) -> bool:
+        """
+        Link a Patient/Drug/Biomarker node to its ontology class counterpart.
+
+        Looks for matching SNOMEDConcept or NCItConcept nodes by label/name
+        and creates [:HAS_ONTOLOGY_CLASS] relationships.
+        Sets ontology_class property on the node.
+
+        Args:
+            node_id: The id/patient_id of the node to enrich.
+            node_label: The Neo4j label (e.g., "Patient", "Drug", "Biomarker").
+
+        Returns:
+            True if enrichment was applied, False otherwise.
+        """
+        if not self.driver:
+            return False
+
+        try:
+            with self.driver.session(database=self.database) as session:
+                if node_label == "Patient":
+                    # Link patient to SNOMED concept based on histology_type
+                    result = session.run(
+                        """
+                        MATCH (p:Patient {patient_id: $node_id})
+                        WHERE p.histology_type IS NOT NULL
+                        OPTIONAL MATCH (sc:SNOMEDConcept)
+                            WHERE toLower(sc.fsn) CONTAINS toLower(p.histology_type)
+                        WITH p, sc LIMIT 1
+                        WHERE sc IS NOT NULL
+                        SET p.ontology_class = sc.sctid
+                        MERGE (p)-[:HAS_ONTOLOGY_CLASS]->(sc)
+                        RETURN sc.sctid AS matched_sctid
+                        """,
+                        {"node_id": node_id},
+                    )
+                    record = result.single()
+                    if record:
+                        logger.debug(f"Patient {node_id} linked to SNOMED {record['matched_sctid']}")
+                        return True
+
+                elif node_label == "Drug":
+                    # Link drug to NCIt concept by name
+                    result = session.run(
+                        """
+                        MATCH (d:Drug {id: $node_id})
+                        WHERE d.name IS NOT NULL
+                        OPTIONAL MATCH (nc:NCItConcept)
+                            WHERE toLower(nc.label) CONTAINS toLower(d.name)
+                        WITH d, nc LIMIT 1
+                        WHERE nc IS NOT NULL
+                        SET d.ontology_class = nc.ncit_code
+                        MERGE (d)-[:HAS_ONTOLOGY_CLASS]->(nc)
+                        RETURN nc.ncit_code AS matched_code
+                        """,
+                        {"node_id": node_id},
+                    )
+                    record = result.single()
+                    if record:
+                        logger.debug(f"Drug {node_id} linked to NCIt {record['matched_code']}")
+                        return True
+
+                elif node_label == "Biomarker":
+                    # Link biomarker to NCIt Gene concept
+                    result = session.run(
+                        """
+                        MATCH (b:Biomarker {id: $node_id})
+                        WHERE b.marker_type IS NOT NULL
+                        OPTIONAL MATCH (nc:NCItConcept)
+                            WHERE toLower(nc.label) = toLower(b.marker_type)
+                        WITH b, nc LIMIT 1
+                        WHERE nc IS NOT NULL
+                        SET b.ontology_class = nc.ncit_code
+                        MERGE (b)-[:HAS_ONTOLOGY_CLASS]->(nc)
+                        RETURN nc.ncit_code AS matched_code
+                        """,
+                        {"node_id": node_id},
+                    )
+                    record = result.single()
+                    if record:
+                        logger.debug(f"Biomarker {node_id} linked to NCIt {record['matched_code']}")
+                        return True
+
+        except Exception as e:
+            logger.warning(f"Ontology enrichment failed for {node_label} {node_id}: {e}")
+
+        return False
 
     # ============================================
     # GUIDELINE OPERATIONS

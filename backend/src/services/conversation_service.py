@@ -209,14 +209,22 @@ class FollowUpGenerator:
                 "Are you interested in neoadjuvant vs adjuvant approaches?"
             ])
         
-        # Always include general options
+        # Biomarker-specific: offer crosswalk/FHIR lookup
+        if biomarkers:
+            questions.append("Look up the SNOMED codes for this patient's biomarkers")
+            if "EGFR" in str(biomarkers):
+                questions.append("Translate SNOMED EGFR concept to NCIt code")
+
+        # Always include general options + semantic layer
         questions.extend([
             "Would you like to see similar cases from our database?",
             "Should I explain the clinical reasoning in more detail?",
-            "Are you interested in current clinical trial options?"
+            "Are you interested in current clinical trial options?",
+            "What ontologies are loaded in the system?",
+            "Expand lung cancer histologies value set",
         ])
-        
-        return questions[:5]  # Limit to 5 suggestions
+
+        return questions[:6]  # Limit to 6 suggestions
 
 
 # --- Pydantic model for validated patient data extraction ---
@@ -297,6 +305,10 @@ class ConversationService:
                 logger.warning("Enhanced features requested but LangGraph not available")
         self.mcp_invoker = get_mcp_invoker()  # MCP tool integration
         self.clustering_service = ClusteringService()  # Patient clustering
+
+        # Dynamic schema cache for Text2Cypher
+        self._dynamic_schema_cache: Optional[str] = None
+        self._dynamic_schema_timestamp: Optional[datetime] = None
 
     def _build_enhanced_graph(self):
         """Build LangGraph conversation flow for enhanced interactions"""
@@ -450,6 +462,9 @@ class ConversationService:
             elif intent == "graph_query":
                 async for chunk in self._stream_graph_query(message, session_id):
                     yield chunk
+            elif intent == "semantic_layer":
+                async for chunk in self._stream_semantic_layer(message, session_id):
+                    yield chunk
             else:
                 async for chunk in self._stream_general_qa(message, session_id):
                     yield chunk
@@ -481,6 +496,27 @@ class ConversationService:
         for pattern in patient_id_patterns:
             if re.search(pattern, message, re.IGNORECASE):
                 return "patient_lookup"
+
+        # Check for semantic layer queries (FHIR, crosswalk, SPARQL, ontology status)
+        semantic_layer_patterns = [
+            r'fhir\s+(lookup|translate|expand|terminology)',
+            r'look\s*up\s+(snomed|loinc|rxnorm|ncit)\s+(code|concept)',
+            r'translate\s+(snomed|loinc|rxnorm|ncit).*(to|into)',
+            r'crosswalk.*(snomed|loinc|rxnorm|ncit)',
+            r'map\s+(a\s+)?(snomed|loinc|rxnorm|ncit)',
+            r'(run|execute)\s+sparql',
+            r'ontology\s+status',
+            r'what\s+ontolog(y|ies)\s+(are|is)\s+loaded',
+            r'snomed\s+concept\s+for',
+            r'ncit\s+concept\s+for',
+            r'value\s+set.*expand',
+            r'provenance\s+(chain|trail|history)',
+            r'expand.*histolog',
+            r'loaded\s+ontolog',
+        ]
+        for pattern in semantic_layer_patterns:
+            if re.search(pattern, message, re.IGNORECASE):
+                return "semantic_layer"
 
         # Check for graph/database query patterns (Text2Cypher)
         graph_query_patterns = [
@@ -2390,10 +2426,104 @@ Provide a detailed, evidence-based answer. Use markdown formatting with headers,
             ]
         })
 
+    def _build_dynamic_text2cypher_schema(self) -> str:
+        """
+        Build Text2Cypher schema from live Neo4j database schema.
+
+        Queries db.schema.nodeTypeProperties() and db.schema.relTypeProperties()
+        to get actual node labels, properties, and relationship types.
+        Appends SNOMEDConcept/NCItConcept info when those labels are present.
+        Caches result for 10 minutes.
+
+        Falls back to hardcoded TEXT2CYPHER_SYSTEM_PROMPT on failure.
+        """
+        # Check cache
+        if (
+            self._dynamic_schema_cache
+            and self._dynamic_schema_timestamp
+            and (datetime.now() - self._dynamic_schema_timestamp).total_seconds() < 600
+        ):
+            return self._dynamic_schema_cache
+
+        try:
+            from ..db.context_graph_client import get_context_graph_client
+            client = get_context_graph_client()
+            if not client.driver:
+                raise RuntimeError("No Neo4j driver")
+
+            with client.driver.session(database=client.database) as session:
+                # Get node type properties
+                node_props = session.run(
+                    "CALL db.schema.nodeTypeProperties() "
+                    "YIELD nodeType, propertyName, propertyTypes "
+                    "RETURN nodeType, collect(propertyName) AS properties"
+                )
+                node_schema = {}
+                for record in node_props:
+                    label = record["nodeType"].replace(":`", "").replace("`", "")
+                    node_schema[label] = record["properties"]
+
+                # Get relationship type properties
+                rel_props = session.run(
+                    "CALL db.schema.relTypeProperties() "
+                    "YIELD relType, propertyName "
+                    "RETURN relType, collect(propertyName) AS properties"
+                )
+                rel_schema = {}
+                for record in rel_props:
+                    rel_type = record["relType"].replace(":`", "").replace("`", "")
+                    rel_schema[rel_type] = record["properties"]
+
+            # Build schema text
+            lines = [
+                "You are a Neo4j Cypher query expert for a lung cancer clinical decision support system.",
+                "",
+                "The graph schema has these node types (from live database):",
+            ]
+            for label, props in sorted(node_schema.items()):
+                prop_str = ", ".join(props[:15])  # limit prop display
+                lines.append(f"- {label} ({prop_str})")
+
+            # Add ontology hints
+            if "SNOMEDConcept" in node_schema:
+                lines.append("")
+                lines.append("SNOMEDConcept nodes: sctid (SNOMED-CT code), fsn (fully specified name), connected via [:IS_A] hierarchy")
+            if "NCItConcept" in node_schema:
+                lines.append("NCItConcept nodes: ncit_code, label, connected via [:IS_A] hierarchy")
+
+            lines.append("")
+            lines.append("Relationship types:")
+            for rel_type, props in sorted(rel_schema.items()):
+                prop_str = f" ({', '.join(props)})" if props else ""
+                lines.append(f"- {rel_type}{prop_str}")
+
+            # SHACL constraint hints
+            lines.extend([
+                "",
+                "Constraints:",
+                "- Patient.performance_status: integer 0-4",
+                "- Patient.tnm_stage: one of IA, IB, IIA, IIB, IIIA, IIIB, IV",
+                "- Inference.confidence: float 0.0-1.0",
+                "",
+                "Return ONLY the Cypher query, no explanation. Use parameters where appropriate ($param syntax).",
+                "Always include RETURN clause. Limit results to 20 unless specifically asked for more.",
+            ])
+
+            schema_prompt = "\n".join(lines)
+            self._dynamic_schema_cache = schema_prompt
+            self._dynamic_schema_timestamp = datetime.now()
+            logger.info(f"Dynamic Text2Cypher schema built: {len(node_schema)} node types, {len(rel_schema)} rel types")
+            return schema_prompt
+
+        except Exception as e:
+            logger.warning(f"Dynamic schema build failed ({e}), using hardcoded schema")
+            return TEXT2CYPHER_SYSTEM_PROMPT
+
     def _text2cypher(self, message: str) -> Optional[str]:
         """Convert natural language to Cypher query using LLM"""
+        schema_prompt = self._build_dynamic_text2cypher_schema()
         messages = [
-            SystemMessage(content=TEXT2CYPHER_SYSTEM_PROMPT),
+            SystemMessage(content=schema_prompt),
             HumanMessage(content=f"Natural language query: {message}\n\nReturn ONLY the Cypher query.")
         ]
 
@@ -2504,6 +2634,245 @@ LIMIT 20"""
             text += f"\n*Showing first 20 of {len(records)} results.*\n"
 
         return text
+
+    async def _stream_semantic_layer(self, message: str, session_id: str) -> AsyncIterator[str]:
+        """Stream semantic layer queries: FHIR, crosswalk, SPARQL, ontology status, provenance."""
+        msg_lower = message.lower()
+
+        yield self._format_sse({"type": "status", "content": "Querying semantic layer..."})
+
+        try:
+            # --- Ontology Status ---
+            if re.search(r'ontology\s+status|loaded\s+ontolog|what\s+ontolog', msg_lower):
+                yield self._format_sse({"type": "status", "content": "Checking loaded ontologies..."})
+                from .ontology_loader_service import OntologyLoaderService
+                loader = OntologyLoaderService()
+                status = loader.get_load_status()
+                loader.close()
+
+                text = "## Ontology Status\n\n"
+                if status.get("available"):
+                    text += f"| Ontology | Count | Loaded |\n|----------|-------|--------|\n"
+                    text += f"| SNOMED-CT Concepts | {status.get('snomed_concepts', 0):,} | {'Yes' if status.get('snomed_loaded') else 'No'} |\n"
+                    text += f"| SNOMED IS_A Rels | {status.get('snomed_is_a_relationships', 0):,} | - |\n"
+                    text += f"| NCIt Concepts | {status.get('ncit_concepts', 0):,} | {'Yes' if status.get('ncit_loaded') else 'No'} |\n"
+                    text += f"| NCIt IS_A Rels | {status.get('ncit_is_a_relationships', 0):,} | - |\n"
+                    text += f"| n10s Classes | {status.get('n10s_class_nodes', 0):,} | - |\n"
+                else:
+                    text += "Neo4j not available. Ontologies cannot be queried.\n"
+
+                yield self._format_sse({"type": "text", "content": text})
+                yield self._format_sse({"type": "suggestions", "content": [
+                    "Load ontologies into Neo4j",
+                    "Look up SNOMED concept for adenocarcinoma",
+                    "Expand lung cancer histologies value set",
+                    "How many patients are in the database?"
+                ]})
+                self._add_to_history(session_id, "assistant", text)
+                return
+
+            # --- FHIR Lookup ---
+            if re.search(r'look\s*up.*(snomed|loinc|rxnorm|ncit)|fhir\s+lookup', msg_lower):
+                yield self._format_sse({"type": "status", "content": "Running FHIR $lookup..."})
+                from .fhir_terminology_service import get_fhir_terminology_service
+                svc = get_fhir_terminology_service()
+
+                # Extract system and code from message
+                code_match = re.search(r'(\d{6,})', message)
+                code = code_match.group(1) if code_match else ""
+                system = "http://snomed.info/sct"
+                if "loinc" in msg_lower:
+                    system = "http://loinc.org"
+                elif "rxnorm" in msg_lower:
+                    system = "http://www.nlm.nih.gov/research/umls/rxnorm"
+                elif "ncit" in msg_lower or "nci" in msg_lower:
+                    system = "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl"
+
+                # If no numeric code, try to extract concept name and look up
+                if not code:
+                    # Extract the concept name after "for" or "of"
+                    name_match = re.search(r'(?:for|of)\s+(.+?)(?:\s+in|\s*$)', message, re.IGNORECASE)
+                    concept_name = name_match.group(1).strip() if name_match else message.split("lookup")[-1].strip()
+                    text = f"## FHIR CodeSystem/$lookup\n\nPlease provide a numeric code to look up. For example:\n"
+                    text += f"- *Look up SNOMED code 254637007* (NSCLC)\n"
+                    text += f"- *Look up LOINC code 48676-1* (EGFR gene)\n\n"
+                    text += f"Searched for: **{concept_name}**\n"
+                    yield self._format_sse({"type": "text", "content": text})
+                else:
+                    result = svc.lookup(system, code)
+                    text = f"## FHIR CodeSystem/$lookup\n\n"
+                    params = result.get("parameter", [])
+                    found = any(p.get("name") == "result" and p.get("valueBoolean") for p in params)
+                    if found:
+                        display = next((p.get("valueString", "") for p in params if p.get("name") == "display"), "")
+                        text += f"| Field | Value |\n|-------|-------|\n"
+                        text += f"| System | `{system}` |\n"
+                        text += f"| Code | `{code}` |\n"
+                        text += f"| Display | {display} |\n"
+                    else:
+                        msg_text = next((p.get("valueString", "") for p in params if p.get("name") == "message"), "Not found")
+                        text += f"Code `{code}` not found in `{system}`. {msg_text}\n"
+                    yield self._format_sse({"type": "text", "content": text})
+
+                yield self._format_sse({"type": "suggestions", "content": [
+                    "Translate SNOMED 254637007 to NCIt",
+                    "Expand lung cancer histologies value set",
+                    "What ontologies are loaded?",
+                    "Look up SNOMED code 35917007"
+                ]})
+                self._add_to_history(session_id, "assistant", text)
+                return
+
+            # --- Crosswalk / Translate ---
+            if re.search(r'crosswalk|translate.*(to|into)|map\s+(a\s+)?(snomed|loinc)', msg_lower):
+                yield self._format_sse({"type": "status", "content": "Running FHIR $translate via UMLS crosswalk..."})
+                from .fhir_terminology_service import get_fhir_terminology_service
+                svc = get_fhir_terminology_service()
+
+                # Extract source code
+                code_match = re.search(r'(\d{6,})', message)
+                code = code_match.group(1) if code_match else "254637007"
+
+                # Determine source and target
+                source_sys = "http://snomed.info/sct"
+                target_sys = "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl"
+                if "loinc" in msg_lower and "snomed" in msg_lower:
+                    source_sys = "http://loinc.org"
+                    target_sys = "http://snomed.info/sct"
+                elif "rxnorm" in msg_lower:
+                    if "to" in msg_lower and "snomed" in msg_lower.split("rxnorm")[0]:
+                        target_sys = "http://www.nlm.nih.gov/research/umls/rxnorm"
+                    else:
+                        source_sys = "http://www.nlm.nih.gov/research/umls/rxnorm"
+                elif "ncit" in msg_lower or "nci" in msg_lower:
+                    if re.search(r'to\s+ncit|to\s+nci|into\s+ncit', msg_lower):
+                        target_sys = "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl"
+                    else:
+                        source_sys = "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl"
+                        target_sys = "http://snomed.info/sct"
+
+                result = svc.translate(source_sys, code, target_sys)
+                text = f"## FHIR ConceptMap/$translate\n\n"
+                params = result.get("parameter", [])
+                found = any(p.get("name") == "result" and p.get("valueBoolean") for p in params)
+                if found:
+                    match = next((p for p in params if p.get("name") == "match"), {})
+                    parts = match.get("part", [])
+                    target_coding = next((p.get("valueCoding", {}) for p in parts if p.get("name") == "concept"), {})
+                    text += f"| Field | Value |\n|-------|-------|\n"
+                    text += f"| Source | `{source_sys}` : `{code}` |\n"
+                    text += f"| Target | `{target_coding.get('system', '')}` : `{target_coding.get('code', '')}` |\n"
+                    text += f"| Equivalence | equivalent |\n"
+                else:
+                    msg_text = next((p.get("valueString", "") for p in params if p.get("name") == "message"), "No mapping found")
+                    text += f"{msg_text}\n"
+
+                yield self._format_sse({"type": "text", "content": text})
+                yield self._format_sse({"type": "suggestions", "content": [
+                    f"Look up SNOMED code {code}",
+                    "Expand lung cancer histologies value set",
+                    "What ontologies are loaded?",
+                    "Show all patients in the database"
+                ]})
+                self._add_to_history(session_id, "assistant", text)
+                return
+
+            # --- ValueSet Expand ---
+            if re.search(r'value\s+set.*expand|expand.*histolog|expand.*biomarker', msg_lower):
+                yield self._format_sse({"type": "status", "content": "Expanding value set..."})
+                from .fhir_terminology_service import get_fhir_terminology_service
+                svc = get_fhir_terminology_service()
+
+                vs_url = "lung-cancer-histologies"
+                if "biomarker" in msg_lower:
+                    vs_url = "lung-cancer-biomarkers"
+
+                result = svc.expand(vs_url)
+                expansion = result.get("expansion", {})
+                concepts = expansion.get("contains", [])
+
+                text = f"## ValueSet: {result.get('title', vs_url)}\n\n"
+                text += f"**Total concepts:** {expansion.get('total', 0)}\n\n"
+                if concepts:
+                    text += "| Code | Display |\n|------|--------|\n"
+                    for c in concepts[:25]:
+                        text += f"| `{c.get('code', '')}` | {c.get('display', '')} |\n"
+                    if len(concepts) > 25:
+                        text += f"\n*...and {len(concepts) - 25} more*\n"
+
+                yield self._format_sse({"type": "text", "content": text})
+                yield self._format_sse({"type": "suggestions", "content": [
+                    "Expand lung cancer biomarkers value set",
+                    "Look up SNOMED code 254637007",
+                    "What ontologies are loaded?",
+                    "Show SNOMED concepts for adenocarcinoma"
+                ]})
+                self._add_to_history(session_id, "assistant", text)
+                return
+
+            # --- Provenance ---
+            if re.search(r'provenance', msg_lower):
+                yield self._format_sse({"type": "status", "content": "Querying provenance chain..."})
+                from ..db.context_graph_client import get_context_graph_client
+                client = get_context_graph_client()
+
+                # Try to extract a decision ID
+                id_match = re.search(r'([0-9a-f]{8}-[0-9a-f]{4})', message)
+                if id_match:
+                    decision_id = id_match.group(1)
+                    # try to find a full UUID match
+                    full_match = re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', message)
+                    if full_match:
+                        decision_id = full_match.group(1)
+                    prov = client.get_provenance_chain(decision_id)
+                    text = f"## Provenance Chain for `{decision_id}`\n\n"
+                    decision = prov.get("decision", {})
+                    if decision:
+                        text += f"| Field | Value |\n|-------|-------|\n"
+                        text += f"| Type | {decision.get('decision_type', 'N/A')} |\n"
+                        text += f"| Treatment | {decision.get('treatment', 'N/A')} |\n"
+                        text += f"| Generated At | {decision.get('prov_generated_at', 'N/A')} |\n"
+                        text += f"| Derived From | {decision.get('prov_was_derived_from', 'N/A')} |\n"
+                        text += f"| Attributed To | {decision.get('prov_was_attributed_to', 'N/A')} |\n\n"
+                    records = prov.get("provenance_records", [])
+                    if records:
+                        text += f"### Provenance Records ({len(records)})\n\n"
+                        for r in records:
+                            text += f"- **Activity:** {r.get('activity', 'N/A')} | **Agent:** {r.get('agent', 'N/A')}\n"
+                    else:
+                        text += "No provenance records found.\n"
+                else:
+                    text = "## Provenance Query\n\nPlease provide a decision ID to trace provenance. Example:\n"
+                    text += "- *Show provenance chain for 3f7a8b2c-1234-5678-9abc-def012345678*\n"
+
+                yield self._format_sse({"type": "text", "content": text})
+                self._add_to_history(session_id, "assistant", text)
+                return
+
+            # --- Fallback: general semantic layer info ---
+            text = "## Semantic Layer Capabilities\n\n"
+            text += "I can help you with these semantic layer operations:\n\n"
+            text += "| Operation | Example |\n|-----------|--------|\n"
+            text += "| **FHIR $lookup** | *Look up SNOMED code 254637007* |\n"
+            text += "| **FHIR $translate** | *Translate SNOMED 254637007 to NCIt* |\n"
+            text += "| **ValueSet $expand** | *Expand lung cancer histologies value set* |\n"
+            text += "| **Ontology Status** | *What ontologies are loaded?* |\n"
+            text += "| **Provenance** | *Show provenance chain for [decision-id]* |\n"
+            text += "| **SPARQL** | *Run SPARQL: SELECT ?s WHERE {?s a onco:Drug}* |\n\n"
+            text += "Try one of the examples above!\n"
+
+            yield self._format_sse({"type": "text", "content": text})
+            yield self._format_sse({"type": "suggestions", "content": [
+                "What ontologies are loaded?",
+                "Look up SNOMED code 254637007",
+                "Translate SNOMED 254637007 to NCIt",
+                "Expand lung cancer histologies value set"
+            ]})
+            self._add_to_history(session_id, "assistant", text)
+
+        except Exception as e:
+            logger.error(f"Semantic layer query error: {e}", exc_info=True)
+            yield self._format_sse({"type": "error", "content": f"Semantic layer error: {str(e)}"})
 
     async def _stream_mcp_tool(self, message: str, session_id: str) -> AsyncIterator[str]:
         """Stream MCP tool invocation responses with enhanced explanations"""

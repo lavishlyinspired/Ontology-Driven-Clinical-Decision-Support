@@ -94,6 +94,12 @@ class IngestionAgent:
             errors.extend(validation_errors)
             return None, errors
 
+        # Step 1b: Ontology-based validation (non-blocking warnings)
+        ontology_warnings = self._validate_against_ontology(raw_data)
+        if ontology_warnings:
+            for w in ontology_warnings:
+                logger.warning(f"[{self.name}] Ontology warning: {w}")
+
         # Step 2: Normalize data
         try:
             normalized_data = self._normalize_data(raw_data)
@@ -132,6 +138,9 @@ class IngestionAgent:
             logger.info(f"  • PS: {patient_fact.performance_status}")
             logger.info(f"  • comorbidities: {patient_fact.comorbidities}")
             logger.info("=" * 60)
+            # Attach ontology warnings (non-blocking) as metadata
+            patient_fact.ontology_warnings = ontology_warnings
+
             logger.info(f"[{self.name}] EXECUTION COMPLETE - SUCCESS")
             logger.info("=" * 60)
             return patient_fact, []
@@ -235,6 +244,76 @@ class IngestionAgent:
             return "70-79"
         else:
             return "80+"
+
+    # Valid ontology histology classes (from LUCADA + SNOMED)
+    VALID_HISTOLOGY_CLASSES = {
+        "Adenocarcinoma", "SquamousCellCarcinoma", "LargeCellCarcinoma",
+        "SmallCellCarcinoma", "Carcinosarcoma", "NonSmallCellCarcinoma_NOS",
+        "Mesothelioma", "Carcinoid", "AdenosquamousCarcinoma",
+        "LargeCell_Neuroendocrine", "Sarcomatoid",
+    }
+
+    VALID_TNM_STAGES = {"IA", "IB", "IIA", "IIB", "IIIA", "IIIB", "IIIC", "IV"}
+
+    KNOWN_GENE_SYMBOLS = {
+        "EGFR", "ALK", "ROS1", "BRAF", "KRAS", "NTRK", "MET", "RET",
+        "HER2", "ERBB2", "PIK3CA", "STK11", "TP53", "NF1", "PTEN",
+    }
+
+    def _validate_against_ontology(self, raw_data: Dict[str, Any]) -> List[str]:
+        """
+        Validate raw data against ontology constraints (SHACL-style).
+
+        Non-blocking: returns warnings but does not reject data.
+        Checks:
+        - Histology against known ontology classes
+        - TNM stage validity
+        - Performance status range (0-4)
+        - Biomarker gene symbols against known genes
+        """
+        warnings = []
+
+        # Check histology
+        histology = raw_data.get("histology_type", "")
+        normalized_hist = self.HISTOLOGY_NORMALIZATION.get(
+            histology.strip().lower(), histology
+        )
+        if normalized_hist and normalized_hist not in self.VALID_HISTOLOGY_CLASSES:
+            warnings.append(
+                f"Histology '{histology}' (normalized: '{normalized_hist}') "
+                f"not in known ontology classes"
+            )
+
+        # Check TNM stage
+        tnm = raw_data.get("tnm_stage", "")
+        try:
+            normalized_tnm = self.normalize_tnm(tnm)
+            if normalized_tnm not in self.VALID_TNM_STAGES:
+                warnings.append(f"TNM stage '{normalized_tnm}' not in valid set")
+        except ValueError:
+            warnings.append(f"TNM stage '{tnm}' could not be normalized")
+
+        # Check PS
+        ps = raw_data.get("performance_status")
+        if ps is not None:
+            try:
+                ps_val = int(ps)
+                if ps_val < 0 or ps_val > 4:
+                    warnings.append(f"Performance status {ps_val} outside valid range 0-4")
+            except (ValueError, TypeError):
+                warnings.append(f"Performance status '{ps}' is not a valid integer")
+
+        # Check biomarker gene symbols
+        biomarkers = raw_data.get("biomarker_profile", {})
+        if isinstance(biomarkers, dict):
+            for marker_type in biomarkers:
+                gene = marker_type.upper().split("_")[0].split("-")[0]
+                if gene not in self.KNOWN_GENE_SYMBOLS and gene != "PD":
+                    warnings.append(
+                        f"Biomarker gene '{marker_type}' not in known gene symbols"
+                    )
+
+        return warnings
 
     def _normalize_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize all patient data fields."""

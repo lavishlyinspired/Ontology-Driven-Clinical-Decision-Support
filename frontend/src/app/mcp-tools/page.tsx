@@ -81,6 +81,22 @@ const mcpToolCategories = [
     ]
   },
   {
+    name: "Semantic Layer (Phase 2-3)",
+    icon: "O",
+    tools: [
+      { name: "fhir_codesystem_lookup", description: "FHIR $lookup for SNOMED/LOINC/RxNorm/NCIt codes" },
+      { name: "fhir_conceptmap_translate", description: "FHIR $translate between vocabularies via UMLS" },
+      { name: "fhir_valueset_expand", description: "FHIR $expand for value sets (histologies, biomarkers)" },
+      { name: "umls_crosswalk", description: "UMLS CUI-based crosswalk between 4 vocabularies" },
+      { name: "load_ncit_thesaurus", description: "Load NCI Thesaurus (Neoplasm/Drug/Gene)" },
+      { name: "execute_sparql", description: "Execute SPARQL queries via n10s" },
+      { name: "get_ontology_status", description: "Check loaded ontology counts" },
+      { name: "get_provenance_chain", description: "PROV-O provenance trail for decisions" },
+      { name: "validate_shacl", description: "Run SHACL validation on graph" },
+      { name: "enrich_with_ontology", description: "Link nodes to SNOMED/NCIt concepts" }
+    ]
+  },
+  {
     name: "Digital Twin",
     icon: "T",
     tools: [

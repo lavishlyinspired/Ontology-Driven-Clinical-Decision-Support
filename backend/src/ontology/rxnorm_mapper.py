@@ -5,8 +5,9 @@ Maps medication names to RxNorm codes for standardization
 and drug interaction checking.
 """
 
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, field
+import os
 
 # Centralized logging
 from ..logging_config import get_logger, log_execution
@@ -48,9 +49,21 @@ class RxNormMapper:
     """
 
     def __init__(self):
-        # Load common oncology drugs
+        # Load common oncology drugs (hardcoded)
         self.rxnorm_mappings = self._load_oncology_drugs()
-        logger.info(f"✓ RxNorm Mapper initialized ({len(self.rxnorm_mappings)} drugs)")
+
+        # Enrich from RRF files if available
+        self._rrf_cache: Dict[str, RxNormConcept] = {}
+        self._name_index: Dict[str, str] = {}  # lowercase name -> rxcui
+        self._relationships: Dict[str, List[Tuple[str, str]]] = {}  # rxcui -> [(rel, target_rxcui)]
+        self._load_from_rrf()
+        self._load_rxnrel()
+
+        logger.info(
+            f"RxNorm Mapper initialized "
+            f"(hardcoded: {len(self.rxnorm_mappings)}, rrf: {len(self._rrf_cache)}, "
+            f"relationships: {sum(len(v) for v in self._relationships.values())})"
+        )
 
     def _load_oncology_drugs(self) -> Dict[str, RxNormConcept]:
         """Load common oncology medication mappings"""
@@ -183,6 +196,80 @@ class RxNormMapper:
 
         return drugs
 
+    def _load_from_rrf(self):
+        """Load drug concepts from RXNCONSO.RRF to enrich beyond hardcoded set."""
+        try:
+            from ..config import LCAConfig
+            rrf_path = os.path.join(LCAConfig.RXNORM_PATH, "rrf", "RXNCONSO.RRF")
+        except Exception:
+            rrf_path = None
+
+        if not rrf_path or not os.path.exists(rrf_path):
+            logger.info("RXNCONSO.RRF not found, using hardcoded mappings only")
+            return
+
+        try:
+            loaded = 0
+            with open(rrf_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if loaded > 500000:
+                        break
+                    parts = line.strip().split('|')
+                    if len(parts) < 15:
+                        continue
+                    rxcui = parts[0]
+                    name = parts[14]
+                    tty = parts[12]
+                    sab = parts[11]
+
+                    # Only load RXNORM-sourced entries with useful term types
+                    if sab == "RXNORM" and tty in ("IN", "BN", "SCD", "SBD", "PIN"):
+                        if rxcui not in self._rrf_cache:
+                            self._rrf_cache[rxcui] = RxNormConcept(
+                                rxcui=rxcui, name=name, tty=tty
+                            )
+                        self._name_index[name.lower()] = rxcui
+                        loaded += 1
+
+            logger.info(f"Loaded {len(self._rrf_cache)} RxNorm concepts from RXNCONSO.RRF")
+        except Exception as e:
+            logger.warning(f"Failed to load RXNCONSO.RRF: {e}")
+
+    def _load_rxnrel(self):
+        """Load drug relationships from RXNREL.RRF."""
+        try:
+            from ..config import LCAConfig
+            rel_path = os.path.join(LCAConfig.RXNORM_PATH, "rrf", "RXNREL.RRF")
+        except Exception:
+            rel_path = None
+
+        if not rel_path or not os.path.exists(rel_path):
+            return
+
+        try:
+            loaded = 0
+            with open(rel_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if loaded > 500000:
+                        break
+                    parts = line.strip().split('|')
+                    if len(parts) < 11:
+                        continue
+                    rxcui1 = parts[0]  # source concept
+                    rel = parts[3]     # relationship type
+                    rxcui2 = parts[4]  # target concept
+                    sab = parts[10]
+
+                    if sab == "RXNORM" and rel in ("has_ingredient", "tradename_of", "has_form", "isa"):
+                        if rxcui1 not in self._relationships:
+                            self._relationships[rxcui1] = []
+                        self._relationships[rxcui1].append((rel, rxcui2))
+                        loaded += 1
+
+            logger.info(f"Loaded {loaded} RxNorm relationships from RXNREL.RRF")
+        except Exception as e:
+            logger.warning(f"Failed to load RXNREL.RRF: {e}")
+
     def map_medication(self, medication_name: str) -> Optional[MedicationMapping]:
         """
         Map medication name to RxNorm code.
@@ -195,7 +282,7 @@ class RxNormMapper:
         """
         normalized = medication_name.lower().strip()
 
-        # Check direct mappings
+        # Check hardcoded mappings first (curated oncology drugs)
         if normalized in self.rxnorm_mappings:
             concept = self.rxnorm_mappings[normalized]
             return MedicationMapping(
@@ -204,6 +291,18 @@ class RxNormMapper:
                 rxnorm_name=concept.name,
                 term_type=concept.tty
             )
+
+        # Check RRF-loaded name index
+        if normalized in self._name_index:
+            rxcui = self._name_index[normalized]
+            concept = self._rrf_cache.get(rxcui)
+            if concept:
+                return MedicationMapping(
+                    medication_name=medication_name,
+                    rxcui=concept.rxcui,
+                    rxnorm_name=concept.name,
+                    term_type=concept.tty
+                )
 
         logger.warning(f"No RxNorm mapping found for: {medication_name}")
         return None

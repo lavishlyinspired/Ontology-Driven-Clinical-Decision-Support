@@ -279,24 +279,30 @@ export default function ChatInterface({ onGraphDataChange, onDecisionNodesChange
       role: 'assistant',
       content: `## ConsensusCare - Clinical Decision Support
 
-Powered by LUCADA ontology, NCCN/NICE/ESMO guidelines, and multi-agent AI workflow.
+Powered by LUCADA ontology, NCCN/NICE/ESMO guidelines, and multi-agent AI workflow with SNOMED-CT, LOINC, RxNorm, and NCI Thesaurus integration.
 
-### Quick Start
+### What I Can Do
 
-| Action | Example |
-|--------|---------|
-| **Analyze Patient** | "68M, stage IIIA adenocarcinoma, EGFR Ex19del+, PS 1" |
-| **Ask Guidelines** | "What is first-line for stage IV NSCLC with PD-L1 80%?" |
-| **Query Database** | "How many patients are in the database?" |
-| **Explore Biomarkers** | "Explain KRAS G12C treatment options" |
+| Category | Example |
+|----------|---------|
+| **Analyze a Patient** | "68M, stage IIIA adenocarcinoma, EGFR Ex19del+, PS 1" |
+| **Guidelines Q&A** | "What is first-line for stage IV NSCLC with PD-L1 80%?" |
+| **Query Knowledge Graph** | "How many patients are in the database?" |
+| **Drug Interactions** | "Check interactions for osimertinib and warfarin" |
+| **Lab Interpretation** | "Interpret lab results for chemotherapy monitoring" |
+| **Ontology Lookup** | "Look up SNOMED code 254637007" |
+| **Vocabulary Translation** | "Translate SNOMED 254637007 to NCIt" |
+| **Value Set Expansion** | "Expand lung cancer histologies value set" |
+| **Provenance Tracking** | "Show provenance chain for [decision-id]" |
 
-### Capabilities
-- **10 guideline rules** (NICE CG121 + modern precision medicine)
-- **Multi-agent workflow** with LangGraph orchestration
-- **Neo4j knowledge graph** with decision traces
-- **LLM-powered** clinical reasoning (Ollama)
+### Architecture
+- **20 specialized agents** with adaptive complexity routing
+- **SNOMED-CT + LOINC + RxNorm + NCIt** loaded in Neo4j
+- **FHIR R4 Terminology** with $lookup, $translate, $expand
+- **PROV-O provenance** tracking for all decisions
+- **MCP tool integration** for 60+ clinical tools
 
-Type \`help\` for full details or describe a patient case to begin.`,
+Try a question below or describe a patient case to begin.`,
       timestamp: 'Welcome'
     }
   ])
@@ -305,7 +311,13 @@ Type \`help\` for full details or describe a patient case to begin.`,
   const [currentStatus, setCurrentStatus] = useState('')
   const [currentComplexity, setCurrentComplexity] = useState<any>(null)
   const [currentPatientData, setCurrentPatientData] = useState<any>(null)
-  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [suggestions, setSuggestions] = useState<string[]>([
+    '68M, stage IIIA adenocarcinoma, EGFR Ex19del+, PS 1, COPD',
+    'What is first-line treatment for stage IV NSCLC with PD-L1 80%?',
+    'What ontologies are loaded in the system?',
+    'Expand lung cancer histologies value set',
+    'How many patients are in the database?',
+  ])
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([])
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -1059,8 +1071,8 @@ Type \`help\` for full details or describe a patient case to begin.`,
           </button>
         </div>
         <p className="text-xs text-zinc-400 mt-3 flex items-center gap-1">
-          <span className="text-violet-400 font-medium">💡 Example:</span>
-          <span>"68-year-old male, stage IIIA adenocarcinoma, EGFR Ex19del positive, PS 1"</span>
+          <span className="text-violet-400 font-medium">💡 Try:</span>
+          <span>"68M stage IIIA adenocarcinoma EGFR+ PS 1" · "What ontologies are loaded?" · "Expand lung cancer biomarkers"</span>
         </p>
       </div>
     </div>

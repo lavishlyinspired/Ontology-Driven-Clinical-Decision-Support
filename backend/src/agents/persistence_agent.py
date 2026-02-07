@@ -94,6 +94,48 @@ class PersistenceAgent:
             logger.warning(f"[{self.name}] Failed to generate embedding: {e}")
             return None
 
+    def _validate_before_persist(
+        self, patient, classification
+    ) -> List[str]:
+        """
+        SHACL-style validation before persisting to Neo4j.
+
+        Validates:
+        - Classification has required fields (scenario, confidence)
+        - Confidence is in range [0, 1]
+        - Recommendations list is non-empty
+        - Patient has required identifiers
+
+        Returns list of warning messages. Non-blocking.
+        """
+        warnings = []
+
+        # Validate classification
+        if classification:
+            if not getattr(classification, "scenario", None):
+                warnings.append("Classification missing 'scenario' field")
+
+            confidence = getattr(classification, "scenario_confidence", None)
+            if confidence is None:
+                warnings.append("Classification missing 'scenario_confidence'")
+            elif not (0.0 <= confidence <= 1.0):
+                warnings.append(f"Confidence {confidence} outside valid range [0, 1]")
+
+            recs = getattr(classification, "recommendations", [])
+            if not recs:
+                warnings.append("Classification has no recommendations")
+        else:
+            warnings.append("No classification result to persist")
+
+        # Validate patient
+        if not isinstance(patient, dict):
+            if not getattr(patient, "patient_id", None):
+                warnings.append("Patient missing patient_id")
+            if not getattr(patient, "tnm_stage", None):
+                warnings.append("Patient missing tnm_stage")
+
+        return warnings
+
     def execute(
         self,
         patient,
@@ -144,7 +186,16 @@ class PersistenceAgent:
         relationships_written = []
 
         try:
-            # Step 0: Generate patient embedding for semantic search
+            # Step 0a: Pre-persist SHACL-style validation
+            shacl_valid = True
+            if not isinstance(patient, dict) and classification:
+                validation_warnings = self._validate_before_persist(patient, classification)
+                if validation_warnings:
+                    shacl_valid = False
+                    for w in validation_warnings:
+                        logger.warning(f"[{self.name}] SHACL validation: {w}")
+
+            # Step 0b: Generate patient embedding for semantic search
             embedding = None
             if not isinstance(patient, dict) and classification:
                 embedding = self._generate_patient_embedding(patient, classification)

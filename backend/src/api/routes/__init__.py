@@ -23,6 +23,8 @@ from .graph import router as graph_router
 from .chat_graph import router as chat_graph_router
 from .ontology import router as ontology_router
 from .graph_algorithms import router as graph_algorithms_router
+from .sparql import router as sparql_router
+from .fhir_terminology import router as fhir_terminology_router
 
 __all__ = [
     "patients_router",
@@ -44,6 +46,8 @@ __all__ = [
     "graph_router",
     "chat_graph_router",
     "ontology_router",
-    "graph_algorithms_router"
+    "graph_algorithms_router",
+    "sparql_router",
+    "fhir_terminology_router"
 ]
 

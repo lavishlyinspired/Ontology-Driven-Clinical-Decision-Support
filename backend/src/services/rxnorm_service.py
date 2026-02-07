@@ -681,10 +681,8 @@ class RXNORMService:
         Args:
             rxnorm_path: Path to the RXNORM data directory
         """
-        self.rxnorm_path = rxnorm_path or os.path.join(
-            os.path.dirname(__file__),
-            "../../../data/lca_ontologies/rxnorm/RxNorm_full_01052026"
-        )
+        from ..config import LCAConfig
+        self.rxnorm_path = rxnorm_path or LCAConfig.RXNORM_PATH
         self._rxnorm_cache: Dict[str, Drug] = {}
         self._name_to_rxcui: Dict[str, str] = {}
         self._loaded = False
@@ -718,7 +716,7 @@ class RXNORMService:
                 with open(rrf_path, 'r', encoding='utf-8') as f:
                     count = 0
                     for line in f:
-                        if count > 100000:  # Limit initial load
+                        if count > 500000:  # Limit initial load
                             break
                         parts = line.strip().split('|')
                         if len(parts) >= 15:

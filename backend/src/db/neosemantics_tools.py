@@ -370,7 +370,26 @@ class NeosemanticsTools:
         }
 
     def _check_valid_histology(self, histology: str) -> bool:
-        """Check if histology is valid LUCADA class"""
+        """Check if histology is valid against SNOMEDConcept nodes, fallback to hardcoded list."""
+        # Try Neo4j graph lookup first
+        if self._available:
+            try:
+                with self.driver.session(database=self.database) as session:
+                    result = session.run(
+                        """
+                        MATCH (c:SNOMEDConcept)
+                        WHERE toLower(c.fsn) CONTAINS toLower($histology)
+                        RETURN count(c) > 0 AS valid
+                        """,
+                        histology=histology
+                    )
+                    record = result.single()
+                    if record and record["valid"]:
+                        return True
+            except Exception:
+                pass  # fall through to hardcoded
+
+        # Fallback: hardcoded list
         valid_histologies = [
             "Adenocarcinoma", "SquamousCellCarcinoma", "LargeCellCarcinoma",
             "SmallCellCarcinoma", "NonSmallCellCarcinoma_NOS"
@@ -378,7 +397,26 @@ class NeosemanticsTools:
         return histology in valid_histologies
 
     def _check_valid_stage(self, stage: str) -> bool:
-        """Check if TNM stage is valid"""
+        """Check if TNM stage is valid against SNOMEDConcept nodes, fallback to hardcoded list."""
+        # Try Neo4j graph lookup first
+        if self._available:
+            try:
+                with self.driver.session(database=self.database) as session:
+                    result = session.run(
+                        """
+                        MATCH (c:SNOMEDConcept)
+                        WHERE c.fsn CONTAINS 'stage' AND c.fsn CONTAINS $stage
+                        RETURN count(c) > 0 AS valid
+                        """,
+                        stage=stage
+                    )
+                    record = result.single()
+                    if record and record["valid"]:
+                        return True
+            except Exception:
+                pass  # fall through to hardcoded
+
+        # Fallback: hardcoded list
         valid_stages = ["I", "IA", "IB", "II", "IIA", "IIB", "III", "IIIA", "IIIB", "IIIC", "IV", "IVA", "IVB"]
         return stage in valid_stages
 

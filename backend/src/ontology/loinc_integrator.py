@@ -9,6 +9,7 @@ LOINC Ontology 2.0: 41,000+ concepts covering 70% of top 20,000 LOINC codes.
 
 from typing import Dict, List, Any, Optional, Tuple
 import os
+import csv
 import requests
 from dataclasses import dataclass
 
@@ -68,11 +69,19 @@ class LOINCIntegrator:
         self.use_online_api = use_online_api
         self.loinc_api_base = "https://fhir.loinc.org" if use_online_api else None
 
-        # Load local LOINC mappings
+        # Load local LOINC mappings (hardcoded)
         self.loinc_mappings = self._load_local_loinc_mappings()
+
+        # Enrich from CSV if available
+        self._csv_cache: Dict[str, LOINCCode] = {}
+        self._load_from_csv()
+
         self.snomed_bridge = self._load_loinc_snomed_bridge()
 
-        logger.info(f"✓ LOINC Integrator initialized (local mappings: {len(self.loinc_mappings)})")
+        logger.info(
+            f"LOINC Integrator initialized "
+            f"(hardcoded: {len(self.loinc_mappings)}, csv: {len(self._csv_cache)})"
+        )
 
     def _load_local_loinc_mappings(self) -> Dict[str, LOINCCode]:
         """Load commonly used LOINC codes for lung cancer workup"""
@@ -264,6 +273,53 @@ class LOINCIntegrator:
 
         return mappings
 
+    def _load_from_csv(self):
+        """Load LOINC codes from real Loinc.csv to enrich beyond hardcoded set."""
+        try:
+            from ..config import LCAConfig
+            csv_path = os.path.join(LCAConfig.LOINC_PATH, "LoincTable", "Loinc.csv")
+        except Exception:
+            csv_path = None
+
+        if not csv_path or not os.path.exists(csv_path):
+            logger.info("LOINC CSV not found, using hardcoded mappings only")
+            return
+
+        try:
+            loaded = 0
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    status = row.get("STATUS", "")
+                    if status != "ACTIVE":
+                        continue
+                    loinc_num = row.get("LOINC_NUM", "").strip()
+                    if not loinc_num:
+                        continue
+                    component = row.get("COMPONENT", "")
+                    # Build a normalized lookup key from component
+                    key = component.lower().replace(" ", "_").replace("-", "_")
+                    code = LOINCCode(
+                        loinc_num=loinc_num,
+                        component=component,
+                        property=row.get("PROPERTY", ""),
+                        time_aspect=row.get("TIME_ASPCT", ""),
+                        system=row.get("SYSTEM", ""),
+                        scale=row.get("SCALE_TYP", ""),
+                        method=row.get("METHOD_TYP", "") or None,
+                        display_name=row.get("LONG_COMMON_NAME", "") or row.get("SHORTNAME", ""),
+                    )
+                    # Index by LOINC number for direct lookup
+                    self._csv_cache[loinc_num] = code
+                    # Also index by normalized component for name-based lookup
+                    if key and key not in self._csv_cache:
+                        self._csv_cache[key] = code
+                    loaded += 1
+
+            logger.info(f"Loaded {loaded} active LOINC codes from CSV")
+        except Exception as e:
+            logger.warning(f"Failed to load LOINC CSV: {e}")
+
     def _load_loinc_snomed_bridge(self) -> Dict[str, str]:
         """Load LOINC to SNOMED-CT bridge mappings (LOINC Ontology 2.0)"""
 
@@ -294,9 +350,17 @@ class LOINCIntegrator:
         # Normalize test name
         normalized = test_name.lower().replace(" ", "_").replace("-", "_")
 
-        # Check local mappings first
+        # Check hardcoded mappings first (curated, with SNOMED mappings)
         if normalized in self.loinc_mappings:
             return self.loinc_mappings[normalized]
+
+        # Check CSV cache (broader coverage)
+        if normalized in self._csv_cache:
+            return self._csv_cache[normalized]
+
+        # Try direct LOINC number lookup in CSV cache
+        if test_name in self._csv_cache:
+            return self._csv_cache[test_name]
 
         # Try online API if enabled
         if self.use_online_api:

@@ -323,6 +323,12 @@ class DynamicWorkflowOrchestrator:
             logger.info(f"  • {factor}")
         logger.info(f"Total Score: {complexity_score:.2f}")
 
+        # Ontology-driven complexity bonus
+        ontology_bonus = self._get_ontology_complexity_bonus(patient_data)
+        if ontology_bonus > 0:
+            complexity_score += ontology_bonus
+            factors.append(f"Ontology bonus: +{ontology_bonus:.1f}")
+
         # Emergency indicators
         if patient_data.get("emergency", False):
             logger.info("⚠ EMERGENCY flag detected → CRITICAL")
@@ -341,6 +347,69 @@ class DynamicWorkflowOrchestrator:
         logger.info(f"Classification: {result.value} (score={complexity_score:.2f})")
         logger.info("=" * 60)
         return result
+
+    # Common NSCLC histologies that are NOT rare
+    COMMON_HISTOLOGIES = {
+        "adenocarcinoma", "squamous cell carcinoma", "squamouscellcarcinoma",
+        "small cell carcinoma", "smallcellcarcinoma", "nsclc",
+        "nonsmallcellcarcinoma_nos", "non-small cell",
+    }
+
+    # Known actionable biomarkers from BiomarkerTherapyMap
+    ACTIONABLE_MUTATIONS = {"EGFR", "ALK", "ROS1", "BRAF", "KRAS", "NTRK", "MET", "RET", "HER2"}
+
+    # Comorbidities that imply contraindication risk
+    CONTRAINDICATION_COMORBIDITIES = {
+        "renal failure", "renal insufficiency", "ckd",
+        "hepatic failure", "cirrhosis", "liver failure",
+        "heart failure", "chf", "cardiac failure",
+        "interstitial lung disease", "ild", "pulmonary fibrosis",
+    }
+
+    def _get_ontology_complexity_bonus(self, patient_data: Dict[str, Any]) -> float:
+        """
+        Query ontology concepts to adjust complexity.
+
+        - Rare histology subtype (not adeno/squamous/small cell): +1.5
+        - Actionable biomarker mutations: +0.5 per mutation
+        - Comorbidities matching contraindication patterns: +1.0
+
+        Falls back to 0 if Neo4j unavailable or data missing.
+        """
+        bonus = 0.0
+
+        try:
+            # Check for rare histology
+            histology = patient_data.get("histology_type", "").lower().replace(" ", "")
+            if histology and histology not in self.COMMON_HISTOLOGIES:
+                bonus += 1.5
+                logger.info(f"  Rare histology '{histology}': +1.5")
+
+            # Check for actionable biomarker mutations
+            biomarkers = patient_data.get("biomarker_profile", {})
+            if isinstance(biomarkers, dict):
+                actionable_count = sum(
+                    1 for marker in biomarkers
+                    if marker.upper().split("_")[0].split("-")[0] in self.ACTIONABLE_MUTATIONS
+                )
+                if actionable_count > 0:
+                    bio_bonus = min(actionable_count * 0.5, 2.0)
+                    bonus += bio_bonus
+                    logger.info(f"  Actionable mutations ({actionable_count}): +{bio_bonus}")
+
+            # Check comorbidities for contraindication patterns
+            comorbidities = patient_data.get("comorbidities", [])
+            if isinstance(comorbidities, list):
+                for comorbidity in comorbidities:
+                    if comorbidity.lower() in self.CONTRAINDICATION_COMORBIDITIES:
+                        bonus += 1.0
+                        logger.info(f"  Contraindication risk '{comorbidity}': +1.0")
+                        break  # Only add once
+
+        except Exception as e:
+            logger.debug(f"Ontology complexity bonus calculation failed: {e}")
+
+        return bonus
 
     def select_workflow_path(self, complexity: WorkflowComplexity) -> List[str]:
         """
