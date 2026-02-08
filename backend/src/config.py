@@ -73,7 +73,7 @@ class LCAConfig:
     # UMLS MRCONSO.RRF for crosswalk
     UMLS_PATH = os.getenv(
         "UMLS_PATH",
-        str(ONTOLOGY_DIR / "umls" / "META")
+        str(ONTOLOGY_DIR / "umls")
     )
 
     LUCADA_ONTOLOGY_OUTPUT = os.getenv(

@@ -67,6 +67,7 @@ class ClinicalDataIngestor:
         counts["guidelines"] = self._ingest_guidelines()
         counts["drugs"] = self._ingest_drug_reference_data()
         counts["biomarker_therapy_map"] = self._ingest_biomarker_therapy_map()
+        counts["biomarker_therapy_inference_map"] = self._ingest_biomarker_therapy_inference_map()
         counts["sample_patients"] = self._ingest_sample_patient_cohort()
         counts["clinical_trials"] = self._ingest_clinical_trials()
         counts["ontology_classes"] = self._ingest_ontology_hierarchy()
@@ -286,6 +287,48 @@ class ClinicalDataIngestor:
                     "line": line, "criteria": criteria, "evidence": evidence
                 })
                 count += 1
+        return count
+
+    def _ingest_biomarker_therapy_inference_map(self) -> int:
+        """Create BiomarkerTherapyMap nodes for graph-based inference.
+        
+        These nodes are used by the Neo4jInferenceEngine to infer therapy classes
+        based on biomarker matches.
+        """
+        mappings = [
+            # (biomarker_pattern, therapy_class, description)
+            ("egfr", "EGFR_TKI", "EGFR mutation → EGFR TKI therapy"),
+            ("alk", "ALK_INHIBITOR", "ALK rearrangement → ALK inhibitor"),
+            ("ros1", "ROS1_INHIBITOR", "ROS1 fusion → ROS1 inhibitor"),
+            ("ret", "RET_INHIBITOR", "RET fusion → RET inhibitor"),
+            ("ntrk", "NTRK_INHIBITOR", "NTRK fusion → TRK inhibitor"),
+            ("met", "MET_INHIBITOR", "MET exon 14 → MET inhibitor"),
+            ("her2", "HER2_THERAPY", "HER2 mutation → HER2 targeted therapy"),
+            ("braf", "BRAF_MEK_COMBINATION", "BRAF V600E → BRAF/MEK combination"),
+            ("kras", "KRAS_G12C_INHIBITOR", "KRAS G12C → KRAS inhibitor"),
+        ]
+
+        count = 0
+        with self.driver.session(database=self.database) as session:
+            for biomarker, therapy_class, description in mappings:
+                session.run("""
+                    MERGE (btm:BiomarkerTherapyMap {biomarker: $biomarker})
+                    SET btm.therapy_class = $therapy_class,
+                        btm.description = $description,
+                        btm.updated_at = datetime()
+                """, {
+                    "biomarker": biomarker,
+                    "therapy_class": therapy_class,
+                    "description": description
+                })
+                count += 1
+            
+            # Create index for faster matching
+            try:
+                session.run("CREATE INDEX btm_biomarker IF NOT EXISTS FOR (b:BiomarkerTherapyMap) ON (b.biomarker)")
+            except Exception:
+                pass
+                
         return count
 
     def _ingest_sample_patient_cohort(self) -> int:

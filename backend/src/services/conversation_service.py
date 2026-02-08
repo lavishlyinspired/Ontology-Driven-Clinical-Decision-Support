@@ -13,8 +13,22 @@ from datetime import datetime
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from neo4j.time import DateTime as Neo4jDateTime, Date as Neo4jDate, Time as Neo4jTime
 
 from pydantic import BaseModel, Field, field_validator
+
+
+def _convert_neo4j_types(obj: Any) -> Any:
+    """Convert Neo4j-specific types to JSON-serializable Python types."""
+    if isinstance(obj, dict):
+        return {k: _convert_neo4j_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_neo4j_types(item) for item in obj]
+    elif isinstance(obj, (Neo4jDateTime, Neo4jDate, Neo4jTime)):
+        return obj.iso_format()
+    elif hasattr(obj, 'isoformat'):  # datetime, date, time
+        return obj.isoformat()
+    return obj
 # Centralized logging
 from ..logging_config import get_logger, log_execution
 
@@ -420,54 +434,150 @@ class ConversationService:
         Yields:
             SSE-formatted chunks with potential follow-up suggestions
         """
+        import time as _time
+        stream_start = _time.time()
+
         # Determine whether to use enhanced features
         use_enhanced = use_enhanced_features if use_enhanced_features is not None else self.enable_enhanced_features
-        
+
         try:
             # Add user message to history
             self._add_to_history(session_id, "user", message)
 
-            # Classify intent with session context first
+            # --- Provenance: Intent Classification ---
+            yield self._format_sse({
+                "type": "progress",
+                "content": "[Router] Classifying user intent..."
+            })
+
             intent = self._classify_intent(message, session_id)
+
+            # Map intent to human-readable descriptions
+            intent_descriptions = {
+                "patient_lookup": "Patient Lookup (fetch existing patient from Neo4j)",
+                "patient_analysis": "Patient Analysis (full multi-agent clinical workflow)",
+                "follow_up": "Follow-Up (context-aware response using prior patient data)",
+                "mcp_tool": "MCP Tool (invoking specialized clinical tool)",
+                "mcp_app": "MCP App (interactive clinical visualization)",
+                "clustering_analysis": "Clustering Analysis (patient similarity / cohort analysis)",
+                "graph_query": "Graph Query (Text2Cypher natural language → Neo4j)",
+                "semantic_layer": "Semantic Layer (FHIR / Crosswalk / Ontology / SPARQL / Provenance)",
+                "general_qa": "General QA (LLM-powered clinical knowledge response)",
+            }
+            intent_desc = intent_descriptions.get(intent, intent)
+
+            yield self._format_sse({
+                "type": "progress",
+                "content": f"[Router] Intent: {intent_desc}"
+            })
+
+            # --- Provenance: LLM availability ---
+            llm_status = f"Ollama ({os.getenv('OLLAMA_MODEL', 'llama3.2')})" if self.llm_available else "Template fallback (no LLM)"
+            yield self._format_sse({
+                "type": "progress",
+                "content": f"[System] LLM: {llm_status}"
+            })
+
+            # --- Provenance: Session context ---
+            has_patient_context = session_id in self.patient_context
+            if has_patient_context and intent == "follow_up":
+                ctx = self.patient_context[session_id]
+                pid = ctx.get("patient_data", {}).get("patient_id", "unknown")
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"[Context] Using prior patient context: {pid}"
+                })
 
             # Enhanced features: check if we should use LangGraph flow
             if use_enhanced and intent == "patient_analysis" and self.conversation_graph:
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Router] Delegating to LangGraph enhanced analysis pipeline"
+                })
                 async for chunk in self._stream_enhanced_analysis(message, session_id):
                     yield chunk
+                elapsed = round(_time.time() - stream_start, 1)
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"[Done] Total time: {elapsed}s | Path: Router → Enhanced Analysis"
+                })
                 return
 
             if intent == "patient_lookup":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] PatientLookupAgent: Querying Neo4j for patient record"
+                })
                 async for chunk in self._stream_patient_lookup(message, session_id):
                     yield chunk
             elif intent == "patient_analysis":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] PatientAnalysisPipeline: Starting multi-agent orchestration"
+                })
                 async for chunk in self._stream_patient_analysis(message, session_id):
                     yield chunk
-                
+
                 # Enhanced: Generate follow-up suggestions after analysis
                 if use_enhanced:
                     await self._add_follow_up_suggestions(session_id)
-                    
+
             elif intent == "follow_up":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] FollowUpAgent: Generating context-aware response"
+                })
                 async for chunk in self._stream_follow_up(message, session_id):
                     yield chunk
             elif intent == "mcp_tool":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] MCPToolAgent: Detecting and invoking MCP tool"
+                })
                 async for chunk in self._stream_mcp_tool(message, session_id):
                     yield chunk
             elif intent == "mcp_app":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] MCPAppAgent: Loading interactive clinical app"
+                })
                 async for chunk in self._stream_mcp_app(message, session_id):
                     yield chunk
             elif intent == "clustering_analysis":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] ClusteringAgent: Running patient similarity analysis"
+                })
                 async for chunk in self._stream_clustering_analysis(message, session_id):
                     yield chunk
             elif intent == "graph_query":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] Text2CypherAgent: Converting natural language to Cypher query"
+                })
                 async for chunk in self._stream_graph_query(message, session_id):
                     yield chunk
             elif intent == "semantic_layer":
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] SemanticLayerAgent: Routing to FHIR/Crosswalk/SPARQL/Ontology"
+                })
                 async for chunk in self._stream_semantic_layer(message, session_id):
                     yield chunk
             else:
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": "[Agent] GeneralQAAgent: Generating clinical knowledge response via LLM"
+                })
                 async for chunk in self._stream_general_qa(message, session_id):
                     yield chunk
+
+            # --- Provenance: Completion ---
+            elapsed = round(_time.time() - stream_start, 1)
+            yield self._format_sse({
+                "type": "progress",
+                "content": f"[Done] Total time: {elapsed}s | Path: Router → {intent}"
+            })
 
         except Exception as e:
             logger.error(f"Chat stream error: {e}", exc_info=True)
@@ -583,18 +693,18 @@ class ConversationService:
                 return "mcp_tool"
 
         # Check if this is a follow-up about an existing patient
+        # NOTE: MCP app/tool patterns are checked above, so those won't reach here
         if session_id and session_id in self.patient_context:
             follow_up_patterns = [
                 r'alternative', r'other\s+option', r'different\s+therap',
                 r'explain', r'reasoning', r'why\b', r'how\s+come',
-                r'similar\s+case', r'similar\s+patient',
                 r'comorbidity', r'side\s+effect', r'toxicity',
-                r'prognosis', r'survival', r'outlook',
-                r'biomarker', r'mutation',
-                r'clinical\s+trial', r'\btrial\b',
+                r'prognosis', r'outlook',
                 r'what\s+about', r'tell\s+me\s+more', r'can\s+you',
                 r'show\s+me', r'more\s+detail', r'elaborate',
                 r'assess', r'interaction', r'risk',
+                r'what\s+(would|should|could)',
+                r'is\s+(there|it)\s+(a|any)',
             ]
             for pattern in follow_up_patterns:
                 if re.search(pattern, message, re.IGNORECASE):
@@ -643,9 +753,12 @@ class ConversationService:
             r'patient\s+id[:\s]+([A-Z0-9_]+)',
             r'\b(CHAT_\d{8}_\d{6})\b',
             r'\b(PAT_[A-Z0-9]+)\b',
-            r'lookup\s+([A-Z0-9_]+)',
-            r'find\s+patient\s+([A-Z0-9_]+)',
-            r'retrieve\s+([A-Z0-9_]+)'
+            r'\b(COHORT_\d{3})\b',  # COHORT_001 through COHORT_999
+            r'\b(LC-\d{4}-\d{3})\b',  # LC-2024-001 format
+            r'lookup\s+([A-Z0-9_-]+)',
+            r'find\s+patient\s+([A-Z0-9_-]+)',
+            r'retrieve\s+([A-Z0-9_-]+)',
+            r'(?:with|for)\s+(?:patient\s+)?([A-Z0-9_-]+)'
         ]
         
         patient_id = None
@@ -676,8 +789,7 @@ class ConversationService:
             return
         
         try:
-            # Query Neo4j for patient
-            from ..db.neo4j_client import Neo4jGraphClient
+            # Query Neo4j for patient (using existing graph_db connection)
             
             query = """
             MATCH (p:Patient {patient_id: $patient_id})
@@ -701,9 +813,9 @@ class ConversationService:
                     })
                     return
                 
-                # Extract patient data
+                # Extract patient data and convert Neo4j types
                 patient_node = record['p']
-                patient_data = dict(patient_node)
+                patient_data = _convert_neo4j_types(dict(patient_node))
                 
                 yield self._format_sse({
                     "type": "status",
@@ -2274,7 +2386,16 @@ Provide a detailed, evidence-based answer. Use markdown formatting with headers,
         # Try streaming LLM response for better UX
         if self.llm_available and self.llm:
             try:
+                model_name = os.getenv("OLLAMA_MODEL", "llama3.2")
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"[GeneralQAAgent] Sending to LLM ({model_name}) with CLINICAL_SYSTEM_PROMPT + {len(history)} history messages"
+                })
                 response = await self._stream_llm_qa(message, history, session_id)
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"[GeneralQAAgent] LLM response received ({len(response)} chars)"
+                })
                 yield self._format_sse({
                     "type": "text",
                     "content": response
@@ -2290,8 +2411,16 @@ Provide a detailed, evidence-based answer. Use markdown formatting with headers,
                 return
             except Exception as e:
                 logger.warning(f"LLM streaming QA failed: {e}, falling back to template")
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"[GeneralQAAgent] LLM failed: {str(e)[:100]} - using template fallback"
+                })
 
         # Fallback to template
+        yield self._format_sse({
+            "type": "progress",
+            "content": "[GeneralQAAgent] Using template-based response (no LLM available)"
+        })
         response = self._generate_qa_response(message, history)
         yield self._format_sse({
             "type": "text",
@@ -2361,18 +2490,40 @@ Provide a detailed, evidence-based answer. Use markdown formatting with headers,
             })
             return
 
+        yield self._format_sse({
+            "type": "progress",
+            "content": "[Text2CypherAgent] Neo4j connected. Building dynamic schema from live database..."
+        })
+
         # Generate Cypher query using LLM
         cypher_query = None
         if self.llm_available and self.llm:
             try:
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"[Text2CypherAgent] Sending to LLM with TEXT2CYPHER_SYSTEM_PROMPT + dynamic schema"
+                })
                 cypher_query = await asyncio.to_thread(
                     self._text2cypher, message
                 )
+                if cypher_query:
+                    yield self._format_sse({
+                        "type": "progress",
+                        "content": f"[Text2CypherAgent] LLM generated Cypher query successfully"
+                    })
             except Exception as e:
                 logger.warning(f"Text2Cypher failed: {e}")
+                yield self._format_sse({
+                    "type": "progress",
+                    "content": f"[Text2CypherAgent] LLM Text2Cypher failed: {str(e)[:80]} - trying predefined queries"
+                })
 
         if not cypher_query:
             # Fallback to common predefined queries
+            yield self._format_sse({
+                "type": "progress",
+                "content": "[Text2CypherAgent] Using predefined query template"
+            })
             cypher_query = self._get_predefined_query(message)
 
         if not cypher_query:
@@ -2641,6 +2792,24 @@ LIMIT 20"""
 
         yield self._format_sse({"type": "status", "content": "Querying semantic layer..."})
 
+        # Detect sub-operation for provenance
+        sub_op = "general"
+        if re.search(r'ontology\s+status|loaded\s+ontolog|what\s+ontolog', msg_lower):
+            sub_op = "ontology_status"
+        elif re.search(r'look\s*up.*(snomed|loinc|rxnorm|ncit)|fhir\s+lookup', msg_lower):
+            sub_op = "fhir_lookup"
+        elif re.search(r'crosswalk|translate.*(to|into)|map\s+(a\s+)?(snomed|loinc)', msg_lower):
+            sub_op = "fhir_translate"
+        elif re.search(r'value\s+set.*expand|expand.*histolog|expand.*biomarker', msg_lower):
+            sub_op = "valueset_expand"
+        elif re.search(r'provenance', msg_lower):
+            sub_op = "provenance_chain"
+
+        yield self._format_sse({
+            "type": "progress",
+            "content": f"[SemanticLayerAgent] Sub-operation: {sub_op}"
+        })
+
         try:
             # --- Ontology Status ---
             if re.search(r'ontology\s+status|loaded\s+ontolog|what\s+ontolog', msg_lower):
@@ -2882,8 +3051,19 @@ LIMIT 20"""
             "content": "Analyzing your query to identify relevant MCP tools..."
         })
 
+        yield self._format_sse({
+            "type": "progress",
+            "content": "[MCPToolAgent] Detecting tool from message keywords..."
+        })
+
         # Determine which tool to invoke based on the message
         tool_name, arguments = await self._detect_mcp_tool(message)
+
+        if tool_name:
+            yield self._format_sse({
+                "type": "progress",
+                "content": f"[MCPToolAgent] Detected tool: {tool_name} | Args: {json.dumps(arguments)[:100]}"
+            })
 
         if not tool_name:
             yield self._format_sse({
@@ -3058,6 +3238,28 @@ LIMIT 20"""
         Detects which interactive app to show and provides the data
         """
         message_lower = message.lower()
+
+        # Detect which app
+        app_name = "unknown"
+        if any(kw in message_lower for kw in ['compare treatment', 'treatment comparison', 'treatment options']):
+            app_name = "treatment-compare"
+        elif any(kw in message_lower for kw in ['survival curve', 'kaplan meier', 'survival data']):
+            app_name = "survival-curves"
+        elif any(kw in message_lower for kw in ['guideline tree', 'nccn decision', 'decision tree']):
+            app_name = "guideline-tree"
+        elif any(kw in message_lower for kw in ['clinical trial', 'trial match', 'trial search']):
+            app_name = "trial-matcher"
+
+        yield self._format_sse({
+            "type": "progress",
+            "content": f"[MCPAppAgent] Detected app: {app_name}"
+        })
+
+        has_patient = session_id in self.patient_context
+        yield self._format_sse({
+            "type": "progress",
+            "content": f"[MCPAppAgent] Patient context: {'yes - will personalize' if has_patient else 'no - using defaults'}"
+        })
 
         # Treatment Comparison App
         if any(kw in message_lower for kw in ['compare treatment', 'treatment comparison', 'treatment options']):

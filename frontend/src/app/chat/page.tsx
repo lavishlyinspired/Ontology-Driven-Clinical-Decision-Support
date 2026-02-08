@@ -294,18 +294,15 @@ export default function ChatPage() {
                   )}
                 </div>
               ) : (
-                <span className="text-xs text-zinc-500">No data - use chat to generate graph</span>
+                <span className="text-xs text-zinc-500">No data - use floating chat to generate graph</span>
               )}
             </div>
             <div className="graph-actions">
-              {/* Graph Type Switcher */}
               <div className="flex items-center gap-1 bg-zinc-800 rounded-lg p-1 mr-2">
                 <button
                   onClick={() => setGraphType('sigma')}
                   className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-                    graphType === 'sigma'
-                      ? 'bg-violet-600 text-white'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                    graphType === 'sigma' ? 'bg-violet-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                   title="Sigma.js graph"
                 >
@@ -314,17 +311,13 @@ export default function ChatPage() {
                 <button
                   onClick={() => setGraphType('cytoscape')}
                   className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-                    graphType === 'cytoscape'
-                      ? 'bg-violet-600 text-white'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                    graphType === 'cytoscape' ? 'bg-violet-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                   title="Cytoscape graph"
                 >
                   Cytoscape
                 </button>
               </div>
-
-              {/* Graph Explorer Controls */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`action-btn ${showFilters ? 'bg-violet-600/20 text-violet-400' : ''}`}
@@ -332,21 +325,11 @@ export default function ChatPage() {
               >
                 <Filter className="w-4 h-4" />
               </button>
-              <button
-                onClick={loadGraphData}
-                className="action-btn"
-                title="Refresh graph"
-                disabled={isLoadingGraph}
-              >
+              <button onClick={loadGraphData} className="action-btn" title="Refresh graph" disabled={isLoadingGraph}>
                 <RefreshCw className={`w-4 h-4 ${isLoadingGraph ? 'animate-spin' : ''}`} />
               </button>
               <button
-                onClick={() => {
-                  if (graphData) {
-                    setGraphData(null)
-                    addActivity('system', 'Graph Cleared', 'Graph data cleared', 'info')
-                  }
-                }}
+                onClick={() => { if (graphData) { setGraphData(null); addActivity('system', 'Graph Cleared', 'Graph data cleared', 'info') } }}
                 className="action-btn"
                 title="Clear graph"
               >
@@ -355,49 +338,23 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {/* Graph Explorer Filter Panel */}
           {showFilters && (
             <div className="graph-filters">
               <div className="filter-group">
-                <label className="filter-label">
-                  <Layers className="w-3 h-3" />
-                  <span>Focus Depth</span>
-                </label>
+                <label className="filter-label"><Layers className="w-3 h-3" /><span>Focus Depth</span></label>
                 <div className="filter-control">
-                  <input
-                    type="range"
-                    min="1"
-                    max="5"
-                    value={focusDepth}
-                    onChange={(e) => setFocusDepth(parseInt(e.target.value))}
-                    className="filter-slider"
-                  />
+                  <input type="range" min="1" max="5" value={focusDepth} onChange={(e) => setFocusDepth(parseInt(e.target.value))} className="filter-slider" />
                   <span className="filter-value">{focusDepth}</span>
                 </div>
               </div>
               <div className="filter-group">
-                <label className="filter-label">
-                  <Network className="w-3 h-3" />
-                  <span>Max Nodes</span>
-                </label>
+                <label className="filter-label"><Network className="w-3 h-3" /><span>Max Nodes</span></label>
                 <div className="filter-control">
-                  <input
-                    type="range"
-                    min="50"
-                    max="500"
-                    step="50"
-                    value={nodeLimit}
-                    onChange={(e) => setNodeLimit(parseInt(e.target.value))}
-                    className="filter-slider"
-                  />
+                  <input type="range" min="50" max="500" step="50" value={nodeLimit} onChange={(e) => setNodeLimit(parseInt(e.target.value))} className="filter-slider" />
                   <span className="filter-value">{nodeLimit}</span>
                 </div>
               </div>
-              <button
-                onClick={loadGraphData}
-                className="filter-apply-btn"
-                disabled={isLoadingGraph}
-              >
+              <button onClick={loadGraphData} className="filter-apply-btn" disabled={isLoadingGraph}>
                 {isLoadingGraph ? 'Loading...' : 'Load Graph'}
               </button>
             </div>
@@ -408,55 +365,16 @@ export default function ChatPage() {
               <SigmaGraph
                 data={graphData ? {
                   nodes: graphData.nodes.map(n => {
-                    // Extract meaningful label from properties
                     const props = n.properties || {}
-                    const label = 
-                      props.name as string ||
-                      props.treatment as string ||
-                      props.drug_name as string ||
-                      props.label as string ||
-                      props.title as string ||
-                      props.guideline_name as string ||
-                      props.test_name as string ||
-                      props.loinc_name as string ||
-                      props.concept_name as string ||
-                      props.description as string ||
-                      props.code as string ||
-                      (typeof props.id === 'string' ? props.id : null) ||
-                      n.id.split(':').pop() ||
-                      n.id
-                    
-                    return {
-                      id: n.id,
-                      label: String(label).substring(0, 50), // Limit length
-                      type: n.labels[0],
-                      properties: n.properties,
-                      color: undefined,
-                      size: undefined
-                    }
+                    const label = props.name as string || props.treatment as string || props.drug_name as string || props.label as string || props.title as string || props.guideline_name as string || props.test_name as string || props.loinc_name as string || props.concept_name as string || props.description as string || props.code as string || (typeof props.id === 'string' ? props.id : null) || n.id.split(':').pop() || n.id
+                    return { id: n.id, label: String(label).substring(0, 50), type: n.labels[0], properties: n.properties, color: undefined, size: undefined }
                   }),
-                  edges: graphData.relationships.map(r => ({
-                    id: r.id,
-                    source: r.startNodeId,
-                    target: r.endNodeId,
-                    label: r.type
-                  }))
+                  edges: graphData.relationships.map(r => ({ id: r.id, source: r.startNodeId, target: r.endNodeId, label: r.type }))
                 } : { nodes: [], edges: [] }}
-                height="100%"
-                showLabels={true}
-                enableZoom={true}
-                enablePan={true}
-                layout="force"
+                height="100%" showLabels={true} enableZoom={true} enablePan={true} layout="force"
               />
             ) : (
-              <CytoscapeGraph
-                graphData={graphData}
-                onNodeClick={handleNodeClick}
-                onGraphDataChange={setGraphData}
-                height="100%"
-                showLegend={true}
-                className="h-full"
-              />
+              <CytoscapeGraph graphData={graphData} onNodeClick={handleNodeClick} onGraphDataChange={setGraphData} height="100%" showLegend={true} className="h-full" />
             )}
           </div>
         </main>

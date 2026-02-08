@@ -379,11 +379,40 @@ class OntologyLoaderService:
 
         try:
             with self.driver.session(database=self.database) as session:
+                # Ensure n10s is configured with namespace handling for SHACL
+                try:
+                    # Check if n10s config exists
+                    config_check = session.run("CALL n10s.graphconfig.show() YIELD param RETURN param").data()
+                    config_exists = len(config_check) > 0
+                except:
+                    config_exists = False
+
+                if not config_exists:
+                    # Initialize n10s with namespace handling enabled
+                    logger.info("Initializing n10s with namespace awareness for SHACL")
+                    session.run("""
+                        CALL n10s.graphconfig.init({
+                            handleVocabUris: 'MAP',
+                            handleMultival: 'ARRAY',
+                            keepCustomDataTypes: true
+                        })
+                    """)
+                
+                # Add namespace prefix mappings for SHACL shapes
+                session.run("""
+                    CALL n10s.nsprefixes.add('onco', 'http://example.org/oncology/')
+                """)
+                session.run("""
+                    CALL n10s.nsprefixes.add('sh', 'http://www.w3.org/ns/shacl#')
+                """)
+                
+                # Now load the SHACL shapes
                 result = session.run(
                     "CALL n10s.validation.shacl.import.fetch($url, 'Turtle')",
                     url=file_uri
                 )
-                stats = result.single()
+                # Use consume() to avoid the single() warning when multiple records exist
+                result.consume()
 
             logger.info(f"Loaded SHACL shapes from {shapes_path}")
             return {"success": True, "shapes_loaded": shapes_path}
@@ -439,10 +468,11 @@ class OntologyLoaderService:
     # ========================================
 
     # NCIt root concepts for subset loading (cancer-relevant)
+    # Using OBO Edition format with NCIT_ prefix
     NCIT_SUBSET_ROOTS = {
-        "C3262",   # Neoplasm
-        "C1908",   # Drug, Food, Chemical or Biomedical Material
-        "C16612",  # Gene
+        "NCIT_C3262",   # Neoplasm
+        "NCIT_C1908",   # Drug, Food, Chemical or Biomedical Material
+        "NCIT_C16612",  # Gene
     }
 
     def load_ncit_via_n10s(self, owl_path: str = None) -> Dict[str, Any]:
@@ -506,7 +536,8 @@ class OntologyLoaderService:
         OWL_NS = "http://www.w3.org/2002/07/owl#"
         RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
         RDFS_NS = "http://www.w3.org/2000/01/rdf-schema#"
-        NCIT_PREFIX = "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#"
+        # OBO Edition uses purl.obolibrary.org format with NCIT_ prefix
+        NCIT_PREFIX = "http://purl.obolibrary.org/obo/"
 
         # First pass: collect all parent→child relationships and labels
         concepts: Dict[str, str] = {}  # code → label

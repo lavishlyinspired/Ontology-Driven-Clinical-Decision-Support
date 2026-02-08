@@ -205,34 +205,47 @@ class Neo4jInferenceEngine:
         patient_filter = "WHERE p.patient_id = $patient_id" if patient_id else ""
         params = {"patient_id": patient_id} if patient_id else {}
 
-        # Try to match via graph BiomarkerTherapyMap nodes first,
-        # then fall back to string matching for any unmatched biomarkers
+        # Simplified query that avoids complex CASE with toFloat to prevent type errors
+        # Uses string-based matching which is safer
         query = f"""
         MATCH (p:Patient)-[:HAS_BIOMARKER]->(b:Biomarker)
         {patient_filter}
         OPTIONAL MATCH (btm:BiomarkerTherapyMap)
-            WHERE toLower(b.marker_type) CONTAINS toLower(btm.biomarker)
+            WHERE toLower(coalesce(b.marker_type, '')) CONTAINS toLower(btm.biomarker)
+        WITH p, b, btm
         WITH p, b,
              CASE
-                // Graph-based: use BiomarkerTherapyMap if matched
+                // Graph-based: use BiomarkerTherapyMap if matched and positive
                 WHEN btm IS NOT NULL AND
-                     (toLower(b.value) CONTAINS 'positive' OR toLower(b.value) = 'true'
-                      OR toLower(b.value) CONTAINS btm.biomarker)
+                     (toLower(coalesce(b.value, '')) CONTAINS 'positive' 
+                      OR toLower(coalesce(b.value, '')) = 'true'
+                      OR toLower(coalesce(b.value, '')) CONTAINS 'mutation'
+                      OR toLower(coalesce(b.value, '')) CONTAINS 'rearrangement'
+                      OR toLower(coalesce(b.value, '')) CONTAINS 'fusion')
                 THEN btm.therapy_class
-                // String-match fallback for PDL1 (percentage-based)
-                WHEN toLower(b.marker_type) CONTAINS 'pdl1' AND
-                     toFloat(replace(b.value, '%', '')) >= 50
+                // PDL1 high (>=50%) - check for percentage pattern
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'pdl1' AND
+                     (toLower(coalesce(b.value, '')) CONTAINS '50%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '60%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '70%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '80%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '90%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '100%' OR
+                      toLower(coalesce(b.value, '')) = 'high')
                 THEN 'IO_MONOTHERAPY'
-                WHEN toLower(b.marker_type) CONTAINS 'pdl1' AND
-                     toFloat(replace(b.value, '%', '')) >= 1 AND
-                     toFloat(replace(b.value, '%', '')) < 50
+                // PDL1 low (1-49%)
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'pdl1' AND
+                     (toLower(coalesce(b.value, '')) CONTAINS '%' OR
+                      toLower(coalesce(b.value, '')) = 'low' OR
+                      toLower(coalesce(b.value, '')) = 'positive')
                 THEN 'CHEMO_IO_COMBINATION'
-                // String-match for KRAS/BRAF variants
-                WHEN toLower(b.marker_type) CONTAINS 'kras' AND
-                     toLower(b.value) CONTAINS 'g12c'
+                // KRAS G12C variant
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'kras' AND
+                     toLower(coalesce(b.value, '')) CONTAINS 'g12c'
                 THEN 'KRAS_G12C_INHIBITOR'
-                WHEN toLower(b.marker_type) CONTAINS 'braf' AND
-                     toLower(b.value) CONTAINS 'v600e'
+                // BRAF V600E variant
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'braf' AND
+                     toLower(coalesce(b.value, '')) CONTAINS 'v600e'
                 THEN 'BRAF_MEK_COMBINATION'
                 ELSE NULL
              END AS inferred_therapy_class
@@ -241,10 +254,15 @@ class Neo4jInferenceEngine:
             patient_id: p.patient_id,
             biomarker: b.marker_type
         }})
-        SET inf.therapy_class = inferred_therapy_class,
+        ON CREATE SET 
+            inf.therapy_class = inferred_therapy_class,
             inf.biomarker_value = b.value,
             inf.inferred_at = datetime(),
             inf.rule = 'snomed_biomarker_therapy_inference'
+        ON MATCH SET 
+            inf.therapy_class = inferred_therapy_class,
+            inf.biomarker_value = b.value,
+            inf.inferred_at = datetime()
         MERGE (b)-[:INDICATES]->(inf)
         MERGE (p)-[:HAS_THERAPY_INFERENCE]->(inf)
         RETURN count(inf) AS inferred
@@ -266,32 +284,48 @@ class Neo4jInferenceEngine:
         patient_filter = "WHERE p.patient_id = $patient_id" if patient_id else ""
         params = {"patient_id": patient_id} if patient_id else {}
 
+        # Use string pattern matching instead of toFloat to avoid type errors
         query = f"""
         MATCH (p:Patient)-[:HAS_BIOMARKER]->(b:Biomarker)
         {patient_filter}
         WITH p, b,
              CASE
-                WHEN toLower(b.marker_type) CONTAINS 'egfr' AND
-                     (toLower(b.value) CONTAINS 'positive' OR toLower(b.value) = 'true')
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'egfr' AND
+                     (toLower(coalesce(b.value, '')) CONTAINS 'positive' OR 
+                      toLower(coalesce(b.value, '')) = 'true' OR
+                      toLower(coalesce(b.value, '')) CONTAINS 'mutation')
                 THEN 'EGFR_TKI'
-                WHEN toLower(b.marker_type) CONTAINS 'alk' AND
-                     (toLower(b.value) CONTAINS 'positive' OR toLower(b.value) = 'true')
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'alk' AND
+                     (toLower(coalesce(b.value, '')) CONTAINS 'positive' OR 
+                      toLower(coalesce(b.value, '')) = 'true' OR
+                      toLower(coalesce(b.value, '')) CONTAINS 'rearrangement')
                 THEN 'ALK_INHIBITOR'
-                WHEN toLower(b.marker_type) CONTAINS 'ros1' AND
-                     (toLower(b.value) CONTAINS 'positive' OR toLower(b.value) = 'true')
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'ros1' AND
+                     (toLower(coalesce(b.value, '')) CONTAINS 'positive' OR 
+                      toLower(coalesce(b.value, '')) = 'true' OR
+                      toLower(coalesce(b.value, '')) CONTAINS 'fusion')
                 THEN 'ROS1_INHIBITOR'
-                WHEN toLower(b.marker_type) CONTAINS 'pdl1' AND
-                     toFloat(replace(b.value, '%', '')) >= 50
+                // PDL1 high (>=50%)
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'pdl1' AND
+                     (toLower(coalesce(b.value, '')) CONTAINS '50%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '60%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '70%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '80%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '90%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS '100%' OR
+                      toLower(coalesce(b.value, '')) = 'high')
                 THEN 'IO_MONOTHERAPY'
-                WHEN toLower(b.marker_type) CONTAINS 'pdl1' AND
-                     toFloat(replace(b.value, '%', '')) >= 1 AND
-                     toFloat(replace(b.value, '%', '')) < 50
+                // PDL1 any positive
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'pdl1' AND
+                     (toLower(coalesce(b.value, '')) CONTAINS '%' OR
+                      toLower(coalesce(b.value, '')) CONTAINS 'positive' OR
+                      toLower(coalesce(b.value, '')) = 'low')
                 THEN 'CHEMO_IO_COMBINATION'
-                WHEN toLower(b.marker_type) CONTAINS 'kras' AND
-                     toLower(b.value) CONTAINS 'g12c'
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'kras' AND
+                     toLower(coalesce(b.value, '')) CONTAINS 'g12c'
                 THEN 'KRAS_G12C_INHIBITOR'
-                WHEN toLower(b.marker_type) CONTAINS 'braf' AND
-                     toLower(b.value) CONTAINS 'v600e'
+                WHEN toLower(coalesce(b.marker_type, '')) CONTAINS 'braf' AND
+                     toLower(coalesce(b.value, '')) CONTAINS 'v600e'
                 THEN 'BRAF_MEK_COMBINATION'
                 ELSE NULL
              END AS inferred_therapy_class
@@ -300,10 +334,15 @@ class Neo4jInferenceEngine:
             patient_id: p.patient_id,
             biomarker: b.marker_type
         }})
-        SET inf.therapy_class = inferred_therapy_class,
+        ON CREATE SET 
+            inf.therapy_class = inferred_therapy_class,
             inf.biomarker_value = b.value,
             inf.inferred_at = datetime(),
             inf.rule = 'biomarker_therapy_inference'
+        ON MATCH SET 
+            inf.therapy_class = inferred_therapy_class,
+            inf.biomarker_value = b.value,
+            inf.inferred_at = datetime()
         MERGE (b)-[:INDICATES]->(inf)
         MERGE (p)-[:HAS_THERAPY_INFERENCE]->(inf)
         RETURN count(inf) AS inferred

@@ -381,16 +381,18 @@ Try a question below or describe a patient case to begin.`,
     }])
 
     try {
-      // Stream response via SSE from backend
+      // Stream response via SSE from backend with graph integration
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/api/v1/chat/stream`, {
+      const response = await fetch(`${apiUrl}/api/chat-graph/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           message: messageText,
-          session_id: sessionId
+          session_id: sessionId,
+          include_graph: true,
+          auto_expand_entities: true
         })
       })
 

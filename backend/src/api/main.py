@@ -337,46 +337,97 @@ async def startup_event():
     """Initialize all services on startup"""
     global lca_service
 
+    print("\n" + "=" * 80)
+    print(" " * 20 + "🚀 Lung Cancer Assistant API v2.0.0")
     print("=" * 80)
-    print("Starting Lung Cancer Assistant API v2.0.0")
-    print("=" * 80)
+    
+    # Display environment configuration
+    print("\n📋 Environment Configuration:")
+    print(f"   • Environment: {os.getenv('ENVIRONMENT', 'development')}")
+    print(f"   • Log Level: {os.getenv('LOG_LEVEL', 'INFO')}")
+    print(f"   • Ollama Model: {os.getenv('OLLAMA_MODEL', 'llama3.2:latest')}")
+    print(f"   • Ollama URL: {os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')}")
+    
+    # LangChain Tracing Status
+    langchain_tracing = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+    if langchain_tracing:
+        project = os.getenv("LANGCHAIN_PROJECT", "LungCancerAssistant")
+        print(f"   • LangChain Tracing: ✅ ENABLED (Project: {project})")
+    else:
+        print(f"   • LangChain Tracing: ⚠️  DISABLED (Set LANGCHAIN_TRACING_V2=true to enable)")
+    
+    # Neo4j Configuration
+    neo4j_uri = os.getenv("NEO4J_URI")
+    if neo4j_uri:
+        neo4j_db = os.getenv("NEO4J_DATABASE", "neo4j")
+        print(f"   • Neo4j: {neo4j_uri} (Database: {neo4j_db})")
+    else:
+        print(f"   • Neo4j: ⚠️  NOT CONFIGURED")
+    
+    print("\n" + "-" * 80)
+    print("Initializing Services...")
+    print("-" * 80 + "\n")
 
     # Step 1: Initialize core LCA service
-    print("📦 Initializing Core LCA Service...")
-    lca_service = LungCancerAssistantService(
-        use_neo4j=os.getenv("NEO4J_URI") is not None,
-        use_vector_store=True
-    )
-    print("   ✓ LCA Service initialized")
+    print("📦 [1/12] Initializing Core LCA Service...")
+    try:
+        lca_service = LungCancerAssistantService(
+            use_neo4j=neo4j_uri is not None,
+            use_vector_store=True
+        )
+        print("   ✓ LCA Service initialized")
+        
+        # Check Neo4j connection status
+        if lca_service.graph_db:
+            if hasattr(lca_service.graph_db, 'verify_connectivity'):
+                try:
+                    if lca_service.graph_db.verify_connectivity():
+                        print("   ✓ Neo4j connected successfully")
+                    else:
+                        print("   ⚠️  Neo4j connection verification failed")
+                except Exception as neo_err:
+                    print(f"   ⚠️  Neo4j connection error: {neo_err}")
+            elif hasattr(lca_service.graph_db, 'driver'):
+                try:
+                    lca_service.graph_db.driver.verify_connectivity()
+                    print("   ✓ Neo4j connected successfully")
+                except Exception as neo_err:
+                    print(f"   ⚠️  Neo4j connection error: {neo_err}")
+        else:
+            print("   ℹ️  Neo4j disabled (graph features unavailable)")
+    except Exception as e:
+        print(f"   ❌ LCA Service initialization failed: {e}")
+        raise
 
     # Step 2: Initialize Redis connection pool (for cache, websocket, batch)
-    print("📦 Initializing Redis Connection Pool...")
+    print("\n📦 [2/12] Initializing Redis Connection Pool...")
     try:
         import redis.asyncio as aioredis
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        print(f"   → Connecting to {redis_url}...")
         app.state.redis = await aioredis.from_url(
             redis_url,
             encoding="utf-8",
             decode_responses=True,
             max_connections=50
         )
-        print(f"   ✓ Redis connected: {redis_url}")
+        print(f"   ✓ Redis connected successfully")
     except Exception as e:
-        print(f"   ⚠ Redis connection failed: {e}")
-        print(f"   → Services will run in degraded mode")
+        print(f"   ⚠️  Redis connection failed: {e}")
+        print(f"   → Services will run in degraded mode (caching disabled)")
         app.state.redis = None
 
     # Step 3: Initialize Authentication Service
-    print("📦 Initializing Authentication Service...")
+    print("\n📦 [3/12] Initializing Authentication Service...")
     try:
         # Auth service already initialized as global
         app.state.auth_service = auth_service
         print("   ✓ Auth service ready")
     except Exception as e:
-        print(f"   ⚠ Auth service warning: {e}")
+        print(f"   ⚠️  Auth service warning: {e}")
 
     # Step 4: Initialize Audit Logger
-    print("📦 Initializing Audit Logger...")
+    print("\n📦 [4/12] Initializing Audit Logger...")
     try:
         app.state.audit_logger = audit_logger
         # Log system startup
@@ -392,91 +443,314 @@ async def startup_event():
         print(f"   ⚠ Audit logger warning: {e}")
 
     # Step 5: Initialize Human-in-the-Loop Service
-    print("📦 Initializing HITL Service...")
+    print("\n📦 [5/12] Initializing HITL Service...")
     try:
         app.state.hitl_service = hitl_service
         print("   ✓ HITL service ready")
     except Exception as e:
-        print(f"   ⚠ HITL service warning: {e}")
+        print(f"   ⚠️  HITL service warning: {e}")
 
     # Step 6: Initialize Analytics Service
-    print("📦 Initializing Analytics Service...")
+    print("\n📦 [6/12] Initializing Analytics Service...")
     try:
         app.state.analytics_service = analytics_service
         print("   ✓ Analytics service ready")
     except Exception as e:
-        print(f"   ⚠ Analytics service warning: {e}")
+        print(f"   ⚠️  Analytics service warning: {e}")
 
     # Step 7: Initialize RAG Service
-    print("📦 Initializing RAG Service...")
+    print("\n📦 [7/12] Initializing RAG Service...")
     try:
         app.state.rag_service = rag_service
         # Initialize embeddings if not already loaded
         if not rag_service.embeddings_model:
+            print("   → Loading embeddings model...")
             await rag_service.initialize()
         print("   ✓ RAG service ready (embeddings loaded)")
     except Exception as e:
-        print(f"   ⚠ RAG service warning: {e}")
+        print(f"   ⚠️  RAG service warning: {e}")
 
     # Step 8: Initialize WebSocket Manager
-    print("📦 Initializing WebSocket Manager...")
+    print("\n📦 [8/12] Initializing WebSocket Manager...")
     try:
         app.state.websocket_service = websocket_service
         print("   ✓ WebSocket manager ready")
     except Exception as e:
-        print(f"   ⚠ WebSocket manager warning: {e}")
+        print(f"   ⚠️  WebSocket manager warning: {e}")
 
     # Step 9: Initialize Version Manager
-    print("📦 Initializing Guideline Version Manager...")
+    print("\n📦 [9/12] Initializing Guideline Version Manager...")
     try:
         app.state.version_service = version_service
         print("   ✓ Version manager ready")
     except Exception as e:
-        print(f"   ⚠ Version manager warning: {e}")
+        print(f"   ⚠️  Version manager warning: {e}")
 
     # Step 10: Initialize Batch Processor
-    print("📦 Initializing Batch Processor...")
+    print("\n📦 [10/12] Initializing Batch Processor...")
     try:
         app.state.batch_service = batch_service
         print("   ✓ Batch processor ready")
     except Exception as e:
-        print(f"   ⚠ Batch processor warning: {e}")
+        print(f"   ⚠️  Batch processor warning: {e}")
 
     # Step 11: Initialize FHIR Service
-    print("📦 Initializing FHIR Service...")
+    print("\n📦 [11/12] Initializing FHIR Service...")
     try:
         app.state.fhir_service = fhir_service
         fhir_url = os.getenv("FHIR_SERVER_URL", "http://localhost:8080/fhir")
         print(f"   ✓ FHIR service ready (target: {fhir_url})")
     except Exception as e:
-        print(f"   ⚠ FHIR service warning: {e}")
+        print(f"   ⚠️  FHIR service warning: {e}")
 
     # Step 12: Initialize Cache Service
-    print("📦 Initializing Cache Service...")
+    print("\n📦 [12/12] Initializing Cache Service...")
     try:
         app.state.cache_service = cache_service
         print("   ✓ Cache service ready")
     except Exception as e:
-        print(f"   ⚠ Cache service warning: {e}")
+        print(f"   ⚠️  Cache service warning: {e}")
 
+    print("\n" + "=" * 80)
+    print(" " * 25 + "✅ SYSTEM READY")
     print("=" * 80)
-    print("✅ All services initialized successfully!")
-    print("📊 System Status:")
-    print(f"   • Core LCA Service: ✓")
-    print(f"   • Authentication: ✓")
-    print(f"   • Audit Logging: ✓")
-    print(f"   • HITL: ✓")
-    print(f"   • Analytics: ✓")
-    print(f"   • RAG: ✓")
-    print(f"   • WebSocket: ✓")
-    print(f"   • Version Control: ✓")
-    print(f"   • Batch Processing: ✓")
-    print(f"   • FHIR Integration: ✓")
-    print(f"   • Cache: ✓")
+    print("\n📊 Service Status Summary:")
+    print("   ✓ Core LCA Service")
+    print(f"   {'✓' if app.state.redis else '⚠️ '} Redis {'(Connected)' if app.state.redis else '(Degraded Mode)'}")
+    print("   ✓ Authentication")
+    print("   ✓ Audit Logging")
+    print("   ✓ HITL")
+    print("   ✓ Analytics")
+    print("   ✓ RAG")
+    print("   ✓ WebSocket")
+    print("   ✓ Version Control")
+    print("   ✓ Batch Processing")
+    print("   ✓ FHIR Integration")
+    print("   ✓ Cache")
+    
+    if lca_service.graph_db:
+        print("   ✓ Neo4j Graph Database")
+    else:
+        print("   ⚠️  Neo4j (Disabled)")
+    
+    if langchain_tracing:
+        print(f"   ✓ LangChain Tracing (Project: {os.getenv('LANGCHAIN_PROJECT', 'N/A')})")
+    else:
+        print("   ⚠️  LangChain Tracing (Disabled)")
+    
+    print("\n" + "=" * 80)
+    print("📚 API Documentation:")
+    print(f"   • Swagger UI: http://localhost:8000/docs")
+    print(f"   • ReDoc: http://localhost:8000/redoc")
+    print(f"   • OpenAPI JSON: http://localhost:8000/openapi.json")
     print("=" * 80)
-    print("🌐 API Documentation: http://localhost:8000/docs")
-    print("🔍 Redoc: http://localhost:8000/redoc")
-    print("=" * 80)
+    print("\n🔄 Background Initialization:")
+    print("   → Ontology loading started (see logs for progress)")
+    print("=" * 80 + "\n")
+
+    # Step 13: Background ontology + clinical data initialization
+    # Runs in background so the API is immediately available
+    asyncio.create_task(_background_data_init())
+
+
+# ==================== Background Data Initialization ====================
+
+# Track initialization progress globally
+_init_status: Dict[str, Any] = {
+    "started": False,
+    "completed": False,
+    "in_progress": False,
+    "steps": {},
+    "errors": [],
+}
+
+
+async def _background_data_init():
+    """Load ontologies, clinical data, and run inference in background."""
+    global _init_status
+    _init_status["started"] = True
+    _init_status["in_progress"] = True
+    _init_status["start_time"] = time.time()
+
+    print("\n" + "🔄" * 40)
+    print("Starting Background Data Initialization")
+    print("🔄" * 40 + "\n")
+    logger.info("Starting background data initialization...")
+
+    # --- Step 1: Load SNOMED-CT subset ---
+    print("📚 [Background 1/3] Loading SNOMED-CT ontology...")
+    _init_status["steps"]["snomed"] = "loading"
+    try:
+        from src.services.ontology_loader_service import OntologyLoaderService
+        loader = OntologyLoaderService()
+        if loader._available:
+            # Check if already loaded
+            status = loader.get_load_status()
+            if status.get("snomed_loaded"):
+                _init_status["steps"]["snomed"] = f"already_loaded ({status.get('snomed_concepts', 0)} concepts)"
+                print(f"   ℹ️  SNOMED already loaded: {status.get('snomed_concepts', 0)} concepts")
+                logger.info(f"SNOMED already loaded: {status.get('snomed_concepts', 0)} concepts")
+            else:
+                print("   → Loading SNOMED RF2 files...")
+                result = await asyncio.to_thread(loader.load_snomed_rf2, True)
+                if result.get("success"):
+                    _init_status["steps"]["snomed"] = f"loaded ({result.get('concepts_loaded', 0)} concepts)"
+                    print(f"   ✓ SNOMED loaded: {result.get('concepts_loaded', 0)} concepts")
+                    logger.info(f"SNOMED loaded: {result.get('concepts_loaded', 0)} concepts")
+                else:
+                    _init_status["steps"]["snomed"] = f"failed: {result.get('message', 'unknown')}"
+                    _init_status["errors"].append(f"SNOMED: {result.get('message')}")
+                    print(f"   ⚠️  SNOMED load failed: {result.get('message', 'unknown')}")
+                    logger.warning(f"SNOMED load failed: {result.get('message')}")
+        else:
+            _init_status["steps"]["snomed"] = "skipped (Neo4j unavailable)"
+            print("   ⚠️  SNOMED skipped: Neo4j not available")
+            logger.warning("SNOMED skipped: Neo4j not available")
+    except Exception as e:
+        _init_status["steps"]["snomed"] = f"error: {str(e)}"
+        _init_status["errors"].append(f"SNOMED: {str(e)}")
+        print(f"   ❌ SNOMED error: {e}")
+        logger.error(f"SNOMED load error: {e}")
+
+    # --- Step 2: Load NCIt subset ---
+    print("\n📚 [Background 2/3] Loading NCIt ontology...")
+    _init_status["steps"]["ncit"] = "loading"
+    try:
+        from src.services.ontology_loader_service import OntologyLoaderService
+        loader = OntologyLoaderService()
+        if loader._available:
+            status = loader.get_load_status()
+            if status.get("ncit_loaded"):
+                _init_status["steps"]["ncit"] = f"already_loaded ({status.get('ncit_concepts', 0)} concepts)"
+                print(f"   ℹ️  NCIt already loaded: {status.get('ncit_concepts', 0)} concepts")
+                logger.info(f"NCIt already loaded: {status.get('ncit_concepts', 0)} concepts")
+            else:
+                print("   → Loading NCIt subset...")
+                result = await asyncio.to_thread(loader.load_ncit_subset)
+                if result.get("success"):
+                    _init_status["steps"]["ncit"] = f"loaded ({result.get('concepts_loaded', 0)} concepts)"
+                    print(f"   ✓ NCIt loaded: {result.get('concepts_loaded', 0)} concepts")
+                    logger.info(f"NCIt loaded: {result.get('concepts_loaded', 0)} concepts")
+                else:
+                    _init_status["steps"]["ncit"] = f"failed: {result.get('message', 'unknown')}"
+                    _init_status["errors"].append(f"NCIt: {result.get('message')}")
+                    print(f"   ⚠️  NCIt load failed: {result.get('message', 'unknown')}")
+            loader.close()
+        else:
+            _init_status["steps"]["ncit"] = "skipped (Neo4j unavailable)"
+            print("   ⚠️  NCIt skipped: Neo4j not available")
+    except Exception as e:
+        _init_status["steps"]["ncit"] = f"error: {str(e)}"
+        _init_status["errors"].append(f"NCIt: {str(e)}")
+        print(f"   ❌ NCIt error: {e}")
+        logger.error(f"NCIt load error: {e}")
+
+    # --- Step 3: Load SHACL shapes ---
+    print("\n📚 [Background 3/3] Loading SHACL validation shapes...")
+    _init_status["steps"]["shacl"] = "loading"
+    try:
+        from src.services.ontology_loader_service import OntologyLoaderService
+        loader = OntologyLoaderService()
+        if loader._available:
+            print("   → Loading SHACL validation shapes...")
+            result = await asyncio.to_thread(loader.load_shacl_shapes)
+            if result.get("success"):
+                _init_status["steps"]["shacl"] = "loaded"
+                print("   ✓ SHACL shapes loaded")
+                logger.info("SHACL shapes loaded")
+            else:
+                _init_status["steps"]["shacl"] = f"failed: {result.get('message', 'unknown')}"
+                print(f"   ⚠️  SHACL load failed: {result.get('message', 'unknown')}")
+                logger.warning(f"SHACL load failed: {result.get('message')}")
+            loader.close()
+        else:
+            _init_status["steps"]["shacl"] = "skipped (Neo4j unavailable)"
+            print("   ⚠️  SHACL skipped: Neo4j not available")
+    except Exception as e:
+        _init_status["steps"]["shacl"] = f"error: {str(e)}"
+        print(f"   ❌ SHACL error: {e}")
+        logger.error(f"SHACL load error: {e}")
+
+    # --- Step 4: Ingest clinical reference data ---
+    _init_status["steps"]["clinical_data"] = "loading"
+    try:
+        from src.services.clinical_data_ingestor import ClinicalDataIngestor
+        ingestor = ClinicalDataIngestor()
+        if ingestor.driver:
+            counts = await asyncio.to_thread(ingestor.ingest_all)
+            ingestor.close()
+            _init_status["steps"]["clinical_data"] = f"loaded ({counts})"
+            logger.info(f"Clinical data ingested: {counts}")
+        else:
+            _init_status["steps"]["clinical_data"] = "skipped (Neo4j unavailable)"
+    except Exception as e:
+        _init_status["steps"]["clinical_data"] = f"error: {str(e)}"
+        _init_status["errors"].append(f"Clinical data: {str(e)}")
+        logger.error(f"Clinical data ingest error: {e}")
+
+    # --- Step 5: Run inference engine ---
+    _init_status["steps"]["inference"] = "running"
+    try:
+        from src.db.neo4j_inference import Neo4jInferenceEngine
+        engine = Neo4jInferenceEngine()
+        if engine.driver:
+            results = await asyncio.to_thread(engine.run_all_inferences, None)
+            engine.close()
+            total = sum(results.values()) if results else 0
+            _init_status["steps"]["inference"] = f"completed ({total} inferences)"
+            logger.info(f"Inference complete: {results}")
+        else:
+            _init_status["steps"]["inference"] = "skipped (Neo4j unavailable)"
+    except Exception as e:
+        _init_status["steps"]["inference"] = f"error: {str(e)}"
+        _init_status["errors"].append(f"Inference: {str(e)}")
+        logger.error(f"Inference error: {e}")
+
+    # --- Step 6: Invalidate Text2Cypher schema cache ---
+    try:
+        from src.services.conversation_service import ConversationService
+        ConversationService._dynamic_schema_cache = None
+        ConversationService._dynamic_schema_timestamp = None
+    except Exception:
+        pass
+
+    # Mark completion
+    _init_status["in_progress"] = False
+    _init_status["completed"] = True
+    _init_status["end_time"] = time.time()
+    _init_status["elapsed_seconds"] = round(_init_status["end_time"] - _init_status["start_time"], 1)
+    elapsed = _init_status["elapsed_seconds"]
+    
+    print("\n" + "🔄" * 40)
+    print("Background Initialization Complete")
+    print("🔄" * 40)
+    print(f"\n⏱️  Total time: {elapsed} seconds")
+    print("\n📊 Summary:")
+    for step, status in _init_status["steps"].items():
+        status_icon = "✓" if "loaded" in str(status) or "already" in str(status) else ("⚠️ " if "skipped" in str(status) else "❌")
+        print(f"   {status_icon} {step}: {status}")
+    
+    if _init_status["errors"]:
+        print(f"\n⚠️  {len(_init_status['errors'])} error(s) occurred:")
+        for err in _init_status["errors"]:
+            print(f"   • {err}")
+    else:
+        print("\n✅ All background tasks completed successfully!")
+    
+    print("=" * 80 + "\n")
+    
+    logger.info(f"Background initialization complete in {elapsed}s")
+
+    logger.info(f"Background data initialization completed in {_init_status['elapsed_seconds']}s")
+    logger.info(f"  Steps: {_init_status['steps']}")
+    if _init_status["errors"]:
+        logger.warning(f"  Errors: {_init_status['errors']}")
+
+
+@app.get("/api/v1/init-status")
+async def get_init_status():
+    """Check background data initialization progress"""
+    return _init_status
 
 
 @app.on_event("shutdown")
